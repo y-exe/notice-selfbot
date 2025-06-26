@@ -1,6 +1,6 @@
 {
   "NOTIFICATION_CHANNEL_ID": "1387147242695168103",
-  "CHECK_INTERVAL_SECONDS": 60,
+  "CHECK_INTERVAL_SECONDS": 600,
   "EVENT_CREATION": {
     "enabled": true,
     "serverId": "1355073968532619376",
@@ -13,7 +13,11 @@
       "serverId": "1355073968532619376",
       "userId": "1213362372014772255",
       "channelId": "1355496498854363309",
-      "roleId": "1387143604027261018"
+      "roleId": "1387143604027261018",
+      "obsSettings": {
+        "sceneName": "Teruki_Discord",
+        "sourceName": "ステージ"
+      }
     },
     {
       "enabled": true,
@@ -21,12 +25,20 @@
       "serverId": "1355073968532619376",
       "userId": "1213362372014772255",
       "channelId": "1369287084963270727",
-      "roleId": "1387143553565720720"
+      "roleId": "1387143553565720720",
+      "obsSettings": {
+        "sceneName": "Teruki_Discord",
+        "sourceName": "作業配信"
+      }
     }
   ],
   "TWITTER_UPDATES": {
     "enabled": true,
     "rssAppUrl": "https://rss.app/feeds/V5ZKV913PibK0H53.xml",
     "roleId": "1387143641058902036"
+  },
+  "OBS_WEBSOCKET": {
+    "enabled": true,
+    "address": "ws://localhost:4455"
   }
 }
