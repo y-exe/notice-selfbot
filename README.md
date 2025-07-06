@@ -1,4 +1,4 @@
-# 自動通知&自動配信self-Bot
+# 高機能Discord自動通知 & 自動配信Self-Bot
 
 これは、特定のDiscordサーバーのアクティビティやSNSの更新を監視し、指定されたチャンネルに自動で通知を送信する、高機能なSelf-Botです。
 さらに、OBS Studioと連携し、特定のユーザーのボイスチャンネル入退室をトリガーに、**YouTube配信を自動で開始・停止**、さらには**配信シーン内のソース表示を制御**する機能を持ちます。
@@ -14,7 +14,7 @@
 ## 主な機能
 
 1.  **Discordイベント通知**: サーバーで新しいイベントが作成された際に通知します。
-2.  **Twitter更新通知**: 特定ユーザーの新規ツイート（リプライ、リツイートを除く）を10分ごとにチェックして通知します。
+2.  **Twitter更新通知**: **Nitter**のウェブサイトを10分ごとにスクレイピングし、特定ユーザーの新規ツイート（リプライ、リツイートを除く）を検知して通知します。外部RSSサービスに依存しないため、より安定しています。
 3.  **ボイスチャンネル入室通知**: 特定ユーザーが指定のボイスチャンネルに入室した際に通知します。
     *   **再接続対応**: 通知後、3分以内の再入室は無視し、不要な通知の重複を防ぎます。
 4.  **OBS連携による自動配信**:
@@ -34,7 +34,7 @@
 
 ## セットアップ手順
 
-### 1. OBSとWebSocketの準備（PC側）
+### 1. OBSとWebSocketの準備
 
 1.  **OBS Studioをインストール**し、配信したいシーンやソース（カメラ、画面キャプチャなど）を事前に設定しておきます。
 2.  OBSのメニューから「ツール」 > 「WebSocketサーバー設定」を開きます。
@@ -52,7 +52,7 @@
 2.  Node.jsプロジェクトを初期化し、必要なライブラリをすべてインストールします。
     ```powershell
     npm init -y
-    npm install discord.js-selfbot-v13 dotenv rss-parser obs-websocket-js
+    npm install discord.js-selfbot-v13 dotenv axios cheerio obs-websocket-js
     ```
 
 ### 3. 設定ファイルの作成
@@ -62,9 +62,8 @@
 
 2.  プロジェクトフォルダ内に `.env` ファイルを作成し、あなたの秘密情報を記述します。
     ```ini
-    # .envファイル
-    DISCORD_TOKEN="ここにあなたのDiscordアカウントトークンを貼り付け"
-    OBS_PASSWORD="ここにOBSで設定したWebSocketパスワードを貼り付け"
+    DISCORD_TOKEN="のDiscordアカウントトークンを貼り付け"
+    OBS_PASSWORD="OBSで設定したWebSocketパスワードを貼り付け"
     ```
     **注意:** `.env`ファイルは絶対に公開しないでください。
 
@@ -85,6 +84,6 @@
         ```
 
     *   **ショートカットの作成:**
-      ```cmd
-      cmd.exe /k "cd /d C:\Notifier_Bot && node index.js"
-      ```
+            ```cmd
+            cmd.exe /k "cd /d C:\Notifier_Bot && node index.js"
+            ```
