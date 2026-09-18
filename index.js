@@ -1,13 +1,22 @@
 require('dotenv').config();
 const { Client } = require('discord.js-selfbot-v13');
-const OBSWebSocket = require('obs-websocket-js').default;
+// const OBSWebSocket = require('obs-websocket-js').default;
+const axios = require('axios');
+const Parser = require('rss-parser');
+const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
 
 const config = require('./config.json');
 const client = new Client({ checkUpdate: false });
-const obs = new OBSWebSocket();
+// const obs = new OBSWebSocket();
+const rssParser = new Parser({
+    requestOptions: {
+        headers: {
+            'User-Agent': 'NotifierBot/1.0 (+https://github.com/)'
+        }
+    }
+});
 
 const STATE_FILE_PATH = path.join(__dirname, 'state.json');
 
@@ -15,13 +24,14 @@ const NOTIFICATION_COOLDOWN_MS = 180 * 1000; // 3分 (通知のクールダウ�
 const STREAM_STOP_GRACE_PERIOD_MS = 180 * 1000; // 3分 (配信停止までの猶予時間)
 const STREAM_DURATION_LIMIT_MS = 11.5 * 60 * 60 * 1000; // 11時間30分 (配信時間の上限)
 
-let state = { lastTweetId: null };
+let state = { lastTweetGuid: null };
 let notificationCooldowns = {};
 let leaveTimers = {};
 let isStreaming = false;
 let activeOBSSourceInfo = null;
 let streamStartTime = null;
 let isInitialTwitterCheck = true;
+let rssBrowser = null;
 
 
 function loadState() {
@@ -54,6 +64,7 @@ async function sendNotification(message) {
     }
 }
 
+/*
 async function connectToOBS() {
     if (!config.OBS_WEBSOCKET.enabled) {
         console.log('OBS WebSocket integration is disabled in config.json.');
@@ -79,6 +90,7 @@ async function connectToOBS() {
         console.error('Failed to connect to OBS WebSocket. Ensure OBS is running and WebSocket server is enabled.', error.code || error.message);
     }
 }
+*/
 
 /**
  * OBSの特定のソースの表示/非表示を切り替える
@@ -86,6 +98,7 @@ async function connectToOBS() {
  * @param {string} sourceName - ソース名
  * @param {boolean} visible - 表示状態
  */
+/*
 async function setOBSSourceVisibility(sceneName, sourceName, visible) {
     if (!config.OBS_WEBSOCKET.enabled) return;
     try {
@@ -96,7 +109,9 @@ async function setOBSSourceVisibility(sceneName, sourceName, visible) {
         console.error(`Failed to set visibility for source '${sourceName}':`, error.message);
     }
 }
+*/
 
+/*
 function startStreamDurationMonitor() {
     console.log('Stream duration monitor started.');
     setInterval(async () => {
@@ -115,64 +130,195 @@ function startStreamDurationMonitor() {
         }
     }, 60 * 1000);
 }
+*/
 
 async function checkTwitter() {
     if (!config.TWITTER_UPDATES.enabled) return;
 
-    const { nitterUsername, roleId } = config.TWITTER_UPDATES;
-    const pythonProcess = spawn('python', ['twitter_scraper.py', nitterUsername]);
+    const { nitterUsername, rssUrl, rssUrls, roleId } = config.TWITTER_UPDATES;
+    const feedUrls = Array.isArray(rssUrls) && rssUrls.length > 0 ? rssUrls : [rssUrl];
 
-    let dataString = '';
-    pythonProcess.stdout.on('data', (data) => {
-        dataString += data.toString();
-    });
+    try {
+        const { feed, sourceUrl } = await fetchFirstAvailableTwitterFeed(feedUrls);
+        const latestTweet = feed.items?.[0];
 
-    pythonProcess.stderr.on('data', (data) => {
-        console.error(`[PythonScraper] Error: ${data}`);
-    });
-
-    pythonProcess.on('close', async (code) => {
-        if (code !== 0) {
-            console.error(`Python script exited with code ${code}`);
-            isInitialTwitterCheck = false;
+        if (!latestTweet) {
+            console.warn(`No tweet items found in RSS feed: ${sourceUrl}`);
             return;
         }
 
-        if (!dataString.trim()) {
-            return;
-        }
+        const latestTweetGuid = latestTweet.guid || latestTweet.id || latestTweet.link;
+        const latestTweetLink = formatTweetUrlForDiscord(latestTweet.link || sourceUrl);
 
-        try {
-            const latestTweet = JSON.parse(dataString);
-            const { id: latestTweetId, link: latestTweetLink } = latestTweet;
-
-            if (latestTweetId && state.lastTweetId !== latestTweetId) {
-                if (!isInitialTwitterCheck) {
-                    console.log(`New tweet found: ${latestTweetLink}`);
-                    const message = `<@&${roleId}> **${nitterUsername}**さんが新しいツイートを投稿しました！\n${latestTweetLink}`;
-                    await sendNotification(message);
-                } else {
-                    console.log(`Initial check complete. Monitoring for new tweets after ID: ${latestTweetId}`);
-                }
-                state.lastTweetId = latestTweetId;
-                saveState();
+        if (latestTweetGuid && state.lastTweetGuid !== latestTweetGuid) {
+            if (!isInitialTwitterCheck) {
+                console.log(`New tweet found: ${latestTweetLink}`);
+                const message = `<@&${roleId}> **${nitterUsername}**さんが新しいツイートを投稿しました！\n${latestTweetLink}`;
+                await sendNotification(message);
+            } else {
+                console.log(`Initial check complete. Monitoring for new tweets after GUID: ${latestTweetGuid}`);
             }
-        } catch (error) {
-            console.error('Failed to parse tweet data from python script:', error);
-        } finally {
-            isInitialTwitterCheck = false;
+            state.lastTweetGuid = latestTweetGuid;
+            saveState();
         }
-    });
+    } catch (error) {
+        console.error('Failed to fetch or parse all configured Twitter RSS feeds:', error.message);
+    } finally {
+        isInitialTwitterCheck = false;
+    }
+}
+
+async function fetchFirstAvailableTwitterFeed(feedUrls) {
+    const errors = [];
+
+    for (const sourceUrl of feedUrls.filter(Boolean)) {
+        try {
+            const rssText = await fetchRssTextWithPuppeteer(sourceUrl);
+
+            if (/^\s*<!doctype html/i.test(rssText) || /^\s*<html/i.test(rssText)) {
+                throw new Error('returned HTML instead of RSS XML');
+            }
+
+            const feed = await rssParser.parseString(rssText);
+            return { feed, sourceUrl };
+        } catch (error) {
+            errors.push(`${sourceUrl}: ${error.message}`);
+            console.warn(`Twitter RSS source unavailable (${sourceUrl}): ${error.message}`);
+        }
+    }
+
+    throw new Error(errors.join(' / ') || 'no RSS URLs configured');
+}
+
+function formatTweetUrlForDiscord(tweetUrl) {
+    return tweetUrl
+        .replace(/^https?:\/\/nitter\.privacyredirect\.com\//i, 'https://fxtwitter.com/')
+        .replace(/#m$/, '');
+}
+
+async function fetchRssTextWithPuppeteer(sourceUrl) {
+    const browser = await getRssBrowser();
+    const page = await browser.newPage();
+
+    try {
+        await page.setUserAgent('NotifierBot/1.0');
+        await page.setExtraHTTPHeaders({
+            Accept: 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8'
+        });
+
+        await page.goto(sourceUrl, {
+            waitUntil: 'networkidle2',
+            timeout: 30000
+        });
+        await page.waitForNetworkIdle({ idleTime: 1000, timeout: 10000 }).catch(() => {});
+
+        return await getDocumentText(page);
+    } finally {
+        await page.close().catch(() => {});
+    }
+}
+
+async function getDocumentText(page) {
+    let lastError;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+            return await page.evaluate(() => {
+                const bodyText = document.body?.innerText?.trim() || '';
+
+                if (/^<\?xml/i.test(bodyText) || /^<rss/i.test(bodyText)) {
+                    return bodyText;
+                }
+
+                return document.documentElement.outerHTML;
+            });
+        } catch (error) {
+            lastError = error;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+
+    throw lastError;
+}
+
+async function getRssBrowser() {
+    if (rssBrowser && rssBrowser.isConnected()) {
+        return rssBrowser;
+    }
+
+    const executablePath = getBrowserExecutablePath();
+    const launchOptions = {
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    };
+
+    if (executablePath) {
+        launchOptions.executablePath = executablePath;
+    }
+
+    try {
+        rssBrowser = await puppeteer.launch(launchOptions);
+    } catch (error) {
+        throw new Error(`${error.message} Install Puppeteer's browser with "npx puppeteer browsers install chrome" or set PUPPETEER_EXECUTABLE_PATH.`);
+    }
+
+    return rssBrowser;
+}
+
+function getBrowserExecutablePath() {
+    const configuredPath = process.env.PUPPETEER_EXECUTABLE_PATH || config.TWITTER_UPDATES.browserExecutablePath;
+    if (configuredPath && fs.existsSync(configuredPath)) {
+        return configuredPath;
+    }
+
+    const candidates = [
+        path.join(process.env.ProgramFiles || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(process.env.LocalAppData || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(process.env.ProgramFiles || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome'
+    ];
+
+    return candidates.find(candidate => candidate && fs.existsSync(candidate));
+}
+
+function startHeartbeat() {
+    const pushUrl = process.env.WATCHER_PUSH_URL;
+    if (!pushUrl) {
+        console.warn('WATCHER_PUSH_URL not set. Heartbeat disabled.');
+        return;
+    }
+
+    const send = async () => {
+        try {
+            const resp = await axios.get(pushUrl);
+            if (resp.status === 200) {
+                console.log(`Heartbeat sent to ${pushUrl}`);
+            } else {
+                console.warn(`Heartbeat failed with status ${resp.status}`);
+            }
+        } catch (e) {
+            console.error(`Heartbeat error: ${e.message}`);
+        }
+    };
+
+    send();
+    setInterval(send, 60 * 1000);
 }
 
 client.on('ready', async () => {
     console.log(`Notifier Bot logged in as ${client.user.tag}`);
     loadState();
-    await connectToOBS();
+    startHeartbeat();
+    // await connectToOBS();
 
-    if (config.OBS_WEBSOCKET.enabled) {
-        startStreamDurationMonitor();
-    }
+    // if (config.OBS_WEBSOCKET.enabled) {
+    //     startStreamDurationMonitor();
+    // }
     if (config.TWITTER_UPDATES.enabled) {
         console.log('Starting Twitter monitoring...');
         isInitialTwitterCheck = true;
@@ -217,6 +363,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         const message = `<@&${joinConfig.roleId}>\nhttps://discord.com/channels/${joinConfig.serverId}/${joinConfig.channelId}\nにて**${joinConfig.type}**が始まりました!!`;
         await sendNotification(message);
 
+/*
         if (config.OBS_WEBSOCKET.enabled) {
             const { sceneName, sourceName } = joinConfig.obsSettings;
             try {
@@ -236,6 +383,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                 console.error('Failed to control OBS on join:', error.message);
             }
         }
+*/
         return;
     }
 
@@ -257,6 +405,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             }
             leaveTimers[leaveConfig.channelId] = setTimeout(async () => {
                 console.log(`Grace period ended for ${leaveConfig.type}. User did not rejoin. Stopping stream...`);
+/*
                 if (config.OBS_WEBSOCKET.enabled) {
                     try {
                         const { sceneName, sourceName } = leaveConfig.obsSettings;
@@ -270,6 +419,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                         console.error('Failed to control OBS on leave:', error.message);
                     }
                 }
+*/
                 delete leaveTimers[leaveConfig.channelId];
             }, STREAM_STOP_GRACE_PERIOD_MS);
         }

@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  notifier:
+    build: .
+    container_name: notifier_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./config.json:/app/config.json
+      - ./state.json:/app/state.json
+    environment:
+      - TZ=Asia/Tokyo

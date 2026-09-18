@@ -1,6 +1,6 @@
 {
   "NOTIFICATION_CHANNEL_ID": "1387147242695168103",
-  "CHECK_INTERVAL_SECONDS": 600,
+  "CHECK_INTERVAL_SECONDS": 60,
   "EVENT_CREATION": {
     "enabled": true,
     "serverId": "1355073968532619376",
@@ -34,11 +34,14 @@
   ],
   "TWITTER_UPDATES": {
     "enabled": true,
-    "rssAppUrl": "https://rss.app/feeds/V5ZKV913PibK0H53.xml",
+    "nitterUsername": "YamakawaTeruki",
+    "rssUrls": [
+      "https://nitter.privacyredirect.com/YamakawaTeruki/rss"
+    ],
     "roleId": "1387143641058902036"
   },
   "OBS_WEBSOCKET": {
-    "enabled": true,
+    "enabled": false,
     "address": "ws://localhost:4455"
   }
 }
