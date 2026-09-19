@@ -1,6 +1,6 @@
 {
   "NOTIFICATION_CHANNEL_ID": "1387147242695168103",
-  "CHECK_INTERVAL_SECONDS": 60,
+  "CHECK_INTERVAL_SECONDS": 180,
   "EVENT_CREATION": {
     "enabled": true,
     "serverId": "1355073968532619376",
@@ -34,9 +34,10 @@
   ],
   "TWITTER_UPDATES": [
     {
-      "enabled": true,
+      "enabled": false,
       "username": "u031f",
-      "roleId": null
+      "roleId": null,
+      "_comment": "動作検証用テストアカウント（必要時に enabled: true に切り替え）"
     },
     {
       "enabled": true,
