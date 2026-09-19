@@ -2,21 +2,14 @@ require('dotenv').config();
 const { Client } = require('discord.js-selfbot-v13');
 // const OBSWebSocket = require('obs-websocket-js').default;
 const axios = require('axios');
-const Parser = require('rss-parser');
-const puppeteer = require('puppeteer');
+const { Scraper } = require('agent-twitter-client');
 const fs = require('fs');
 const path = require('path');
 
 const config = require('./config.json');
 const client = new Client({ checkUpdate: false });
+const scraper = new Scraper();
 // const obs = new OBSWebSocket();
-const rssParser = new Parser({
-    requestOptions: {
-        headers: {
-            'User-Agent': 'NotifierBot/1.0 (+https://github.com/)'
-        }
-    }
-});
 
 const STATE_FILE_PATH = path.join(__dirname, 'state.json');
 
@@ -31,8 +24,7 @@ let isStreaming = false;
 let activeOBSSourceInfo = null;
 let streamStartTime = null;
 let isInitialTwitterCheck = true;
-let rssBrowser = null;
-
+let isTwitterInitialized = false;
 
 function loadState() {
     if (fs.existsSync(STATE_FILE_PATH)) {
@@ -132,158 +124,101 @@ function startStreamDurationMonitor() {
 }
 */
 
-async function checkTwitter() {
-    if (!config.TWITTER_UPDATES.enabled) return;
+async function initTwitterAuth() {
+    if (process.env.TWITTER_AUTH_TOKEN && process.env.TWITTER_CT0) {
+        const cookies = [
+            `auth_token=${process.env.TWITTER_AUTH_TOKEN}; Domain=.twitter.com; Path=/; Secure; HttpOnly`,
+            `ct0=${process.env.TWITTER_CT0}; Domain=.twitter.com; Path=/; Secure`
+        ];
+        if (process.env.TWITTER_TWID) {
+            cookies.push(`twid=${process.env.TWITTER_TWID}; Domain=.twitter.com; Path=/; Secure`);
+        }
+        await scraper.setCookies(cookies);
+        isTwitterInitialized = true;
+        console.log('Twitter client authenticated via discrete cookies.');
+        return;
+    }
 
-    const { nitterUsername, rssUrl, rssUrls, roleId } = config.TWITTER_UPDATES;
-    const feedUrls = Array.isArray(rssUrls) && rssUrls.length > 0 ? rssUrls : [rssUrl];
+    if (process.env.TWITTER_COOKIES) {
+        let cookies;
+        try {
+            cookies = JSON.parse(process.env.TWITTER_COOKIES);
+        } catch {
+            cookies = process.env.TWITTER_COOKIES.split(';').map(c => c.trim()).filter(Boolean);
+        }
+        if (Array.isArray(cookies) && cookies.length > 0) {
+            await scraper.setCookies(cookies);
+            isTwitterInitialized = true;
+            console.log('Twitter client authenticated via TWITTER_COOKIES.');
+            return;
+        }
+    }
+
+    if (process.env.TWITTER_USERNAME && process.env.TWITTER_PASSWORD) {
+        console.log('Logging in to Twitter with username and password...');
+        await scraper.login(
+            process.env.TWITTER_USERNAME,
+            process.env.TWITTER_PASSWORD,
+            process.env.TWITTER_EMAIL
+        );
+        isTwitterInitialized = true;
+        console.log('Twitter client logged in successfully.');
+        return;
+    }
+
+    console.warn('No Twitter credentials found. Please set TWITTER_AUTH_TOKEN & TWITTER_CT0 in environment.');
+}
+
+async function checkTwitter() {
+    if (!config.TWITTER_UPDATES?.enabled) return;
+
+    const username = config.TWITTER_UPDATES.username || config.TWITTER_UPDATES.nitterUsername || 'YamakawaTeruki';
+    const roleId = config.TWITTER_UPDATES.roleId;
 
     try {
-        const { feed, sourceUrl } = await fetchFirstAvailableTwitterFeed(feedUrls);
-        const latestTweet = feed.items?.[0];
+        if (!isTwitterInitialized) {
+            await initTwitterAuth();
+        }
 
-        if (!latestTweet) {
-            console.warn(`No tweet items found in RSS feed: ${sourceUrl}`);
+        const tweetsGenerator = scraper.getTweets(username, 10);
+        let latestNormalTweet = null;
+
+        for await (const tweet of tweetsGenerator) {
+            if (!tweet || !tweet.id) continue;
+            // リツイートやリプライは除外
+            if (tweet.isRetweet || tweet.isReply) continue;
+
+            latestNormalTweet = tweet;
+            break;
+        }
+
+        if (!latestNormalTweet) {
+            console.warn(`No valid tweet found for ${username}`);
             return;
         }
 
-        const latestTweetGuid = latestTweet.guid || latestTweet.id || latestTweet.link;
-        const latestTweetLink = formatTweetUrlForDiscord(latestTweet.link || sourceUrl);
+        const latestTweetGuid = latestNormalTweet.id;
+        const tweetLink = `https://fxtwitter.com/${username}/status/${latestNormalTweet.id}`;
 
         if (latestTweetGuid && state.lastTweetGuid !== latestTweetGuid) {
             if (!isInitialTwitterCheck) {
-                console.log(`New tweet found: ${latestTweetLink}`);
-                const message = `<@&${roleId}> **${nitterUsername}**さんが新しいツイートを投稿しました！\n${latestTweetLink}`;
+                console.log(`New tweet found: ${tweetLink}`);
+                const message = `<@&${roleId}> **${username}**さんが新しいツイートを投稿しました！\n${tweetLink}`;
                 await sendNotification(message);
             } else {
-                console.log(`Initial check complete. Monitoring for new tweets after GUID: ${latestTweetGuid}`);
+                console.log(`Initial check complete. Monitoring for new tweets after ID: ${latestTweetGuid}`);
             }
             state.lastTweetGuid = latestTweetGuid;
             saveState();
         }
     } catch (error) {
-        console.error('Failed to fetch or parse all configured Twitter RSS feeds:', error.message);
+        console.error('Failed to check Twitter:', error.message);
+        if (error.message && (error.message.includes('401') || error.message.includes('auth') || error.message.includes('Session'))) {
+            isTwitterInitialized = false;
+        }
     } finally {
         isInitialTwitterCheck = false;
     }
-}
-
-async function fetchFirstAvailableTwitterFeed(feedUrls) {
-    const errors = [];
-
-    for (const sourceUrl of feedUrls.filter(Boolean)) {
-        try {
-            const rssText = await fetchRssTextWithPuppeteer(sourceUrl);
-
-            if (/^\s*<!doctype html/i.test(rssText) || /^\s*<html/i.test(rssText)) {
-                throw new Error('returned HTML instead of RSS XML');
-            }
-
-            const feed = await rssParser.parseString(rssText);
-            return { feed, sourceUrl };
-        } catch (error) {
-            errors.push(`${sourceUrl}: ${error.message}`);
-            console.warn(`Twitter RSS source unavailable (${sourceUrl}): ${error.message}`);
-        }
-    }
-
-    throw new Error(errors.join(' / ') || 'no RSS URLs configured');
-}
-
-function formatTweetUrlForDiscord(tweetUrl) {
-    return tweetUrl
-        .replace(/^https?:\/\/nitter\.privacyredirect\.com\//i, 'https://fxtwitter.com/')
-        .replace(/#m$/, '');
-}
-
-async function fetchRssTextWithPuppeteer(sourceUrl) {
-    const browser = await getRssBrowser();
-    const page = await browser.newPage();
-
-    try {
-        await page.setUserAgent('NotifierBot/1.0');
-        await page.setExtraHTTPHeaders({
-            Accept: 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8'
-        });
-
-        await page.goto(sourceUrl, {
-            waitUntil: 'networkidle2',
-            timeout: 30000
-        });
-        await page.waitForNetworkIdle({ idleTime: 1000, timeout: 10000 }).catch(() => {});
-
-        return await getDocumentText(page);
-    } finally {
-        await page.close().catch(() => {});
-    }
-}
-
-async function getDocumentText(page) {
-    let lastError;
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-        try {
-            return await page.evaluate(() => {
-                const bodyText = document.body?.innerText?.trim() || '';
-
-                if (/^<\?xml/i.test(bodyText) || /^<rss/i.test(bodyText)) {
-                    return bodyText;
-                }
-
-                return document.documentElement.outerHTML;
-            });
-        } catch (error) {
-            lastError = error;
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-    }
-
-    throw lastError;
-}
-
-async function getRssBrowser() {
-    if (rssBrowser && rssBrowser.isConnected()) {
-        return rssBrowser;
-    }
-
-    const executablePath = getBrowserExecutablePath();
-    const launchOptions = {
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    };
-
-    if (executablePath) {
-        launchOptions.executablePath = executablePath;
-    }
-
-    try {
-        rssBrowser = await puppeteer.launch(launchOptions);
-    } catch (error) {
-        throw new Error(`${error.message} Install Puppeteer's browser with "npx puppeteer browsers install chrome" or set PUPPETEER_EXECUTABLE_PATH.`);
-    }
-
-    return rssBrowser;
-}
-
-function getBrowserExecutablePath() {
-    const configuredPath = process.env.PUPPETEER_EXECUTABLE_PATH || config.TWITTER_UPDATES.browserExecutablePath;
-    if (configuredPath && fs.existsSync(configuredPath)) {
-        return configuredPath;
-    }
-
-    const candidates = [
-        path.join(process.env.ProgramFiles || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        path.join(process.env['ProgramFiles(x86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        path.join(process.env.LocalAppData || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        path.join(process.env.ProgramFiles || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-        path.join(process.env['ProgramFiles(x86)'] || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-        '/usr/bin/chromium-browser',
-        '/usr/bin/chromium',
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/google-chrome'
-    ];
-
-    return candidates.find(candidate => candidate && fs.existsSync(candidate));
 }
 
 function startHeartbeat() {
@@ -319,11 +254,11 @@ client.on('ready', async () => {
     // if (config.OBS_WEBSOCKET.enabled) {
     //     startStreamDurationMonitor();
     // }
-    if (config.TWITTER_UPDATES.enabled) {
-        console.log('Starting Twitter monitoring...');
+    if (config.TWITTER_UPDATES?.enabled) {
+        console.log('Starting Twitter monitoring via lightweight API...');
         isInitialTwitterCheck = true;
         checkTwitter();
-        setInterval(checkTwitter, config.CHECK_INTERVAL_SECONDS * 1000);
+        setInterval(checkTwitter, (config.CHECK_INTERVAL_SECONDS || 60) * 1000);
     }
 });
 
@@ -425,7 +360,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
     }
 });
-
 
 client.login(process.env.DISCORD_TOKEN).catch(err => {
     console.error("Fatal Login Error:", err.message);

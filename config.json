@@ -34,10 +34,8 @@
   ],
   "TWITTER_UPDATES": {
     "enabled": true,
+    "username": "YamakawaTeruki",
     "nitterUsername": "YamakawaTeruki",
-    "rssUrls": [
-      "https://nitter.privacyredirect.com/YamakawaTeruki/rss"
-    ],
     "roleId": "1387143641058902036"
   },
   "OBS_WEBSOCKET": {
