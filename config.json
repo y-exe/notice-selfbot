@@ -32,12 +32,18 @@
       }
     }
   ],
-  "TWITTER_UPDATES": {
-    "enabled": true,
-    "username": "YamakawaTeruki",
-    "nitterUsername": "YamakawaTeruki",
-    "roleId": "1387143641058902036"
-  },
+  "TWITTER_UPDATES": [
+    {
+      "enabled": true,
+      "username": "u031f",
+      "roleId": null
+    },
+    {
+      "enabled": true,
+      "username": "YamakawaTeruki",
+      "roleId": "1387143641058902036"
+    }
+  ],
   "OBS_WEBSOCKET": {
     "enabled": false,
     "address": "ws://localhost:4455"

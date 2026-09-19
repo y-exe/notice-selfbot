@@ -17,20 +17,29 @@ const STREAM_DURATION_LIMIT_MS = 11.5 * 60 * 60 * 1000; // 11時間30分 (配信
 
 const TWITTER_BEARER_TOKEN = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
 
-let state = { lastTweetGuid: null };
+let state = {
+    lastTweetGuid: null,
+    lastTweetGuids: {}
+};
 let notificationCooldowns = {};
 let leaveTimers = {};
 let isStreaming = false;
 let activeOBSSourceInfo = null;
 let streamStartTime = null;
-let isInitialTwitterCheck = true;
-let cachedTwitterUserId = null;
+let initialCheckedUsers = new Set();
+let cachedTwitterUserIds = {};
 
 function loadState() {
     if (fs.existsSync(STATE_FILE_PATH)) {
         try {
             state = JSON.parse(fs.readFileSync(STATE_FILE_PATH));
-            console.log('State loaded successfully. Last known tweet ID:', state.lastTweetGuid);
+            if (!state.lastTweetGuids || typeof state.lastTweetGuids !== 'object') {
+                state.lastTweetGuids = {};
+            }
+            if (state.lastTweetGuid && !state.lastTweetGuids['YamakawaTeruki']) {
+                state.lastTweetGuids['YamakawaTeruki'] = state.lastTweetGuid;
+            }
+            console.log('State loaded successfully. Current tweet states:', JSON.stringify(state.lastTweetGuids));
         } catch (e) {
             console.error('Failed to parse state file.', e);
         }
@@ -125,7 +134,7 @@ function startStreamDurationMonitor() {
 */
 
 async function getTwitterUserId(username, authToken, ct0) {
-    if (cachedTwitterUserId) return cachedTwitterUserId;
+    if (cachedTwitterUserIds[username]) return cachedTwitterUserIds[username];
 
     const url = `https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${encodeURIComponent(JSON.stringify({ screen_name: username }))}`;
     const res = await fetch(url, {
@@ -140,7 +149,7 @@ async function getTwitterUserId(username, authToken, ct0) {
     });
 
     if (!res.ok) {
-        throw new Error(`Failed to fetch user profile: HTTP ${res.status}`);
+        throw new Error(`Failed to fetch user profile for ${username}: HTTP ${res.status}`);
     }
 
     const data = await res.json();
@@ -149,7 +158,7 @@ async function getTwitterUserId(username, authToken, ct0) {
         throw new Error(`User ID not found for ${username}`);
     }
 
-    cachedTwitterUserId = userId;
+    cachedTwitterUserIds[username] = userId;
     return userId;
 }
 
@@ -212,7 +221,7 @@ async function fetchLatestTweet(username) {
     });
 
     if (!res.ok) {
-        throw new Error(`Failed to fetch user tweets: HTTP ${res.status}`);
+        throw new Error(`Failed to fetch user tweets for ${username}: HTTP ${res.status}`);
     }
 
     const data = await res.json();
@@ -249,36 +258,52 @@ async function fetchLatestTweet(username) {
 }
 
 async function checkTwitter() {
-    if (!config.TWITTER_UPDATES?.enabled) return;
+    if (!config.TWITTER_UPDATES) return;
 
-    const username = config.TWITTER_UPDATES.username || config.TWITTER_UPDATES.nitterUsername || 'YamakawaTeruki';
-    const roleId = config.TWITTER_UPDATES.roleId;
+    const rawTargets = Array.isArray(config.TWITTER_UPDATES)
+        ? config.TWITTER_UPDATES
+        : [config.TWITTER_UPDATES];
 
-    try {
-        const latestTweet = await fetchLatestTweet(username);
+    const targets = rawTargets.filter(t => t && t.enabled !== false);
 
-        if (!latestTweet) {
-            return;
-        }
+    for (const target of targets) {
+        const username = target.username || target.nitterUsername;
+        if (!username) continue;
 
-        const latestTweetGuid = latestTweet.id;
-        const tweetLink = latestTweet.url;
+        const roleId = target.roleId;
 
-        if (latestTweetGuid && state.lastTweetGuid !== latestTweetGuid) {
-            if (!isInitialTwitterCheck) {
-                console.log(`New tweet found: ${tweetLink}`);
-                const message = `<@&${roleId}> **${username}**さんが新しいツイートを投稿しました！\n${tweetLink}`;
-                await sendNotification(message);
-            } else {
-                console.log(`Initial check complete. Monitoring for new tweets after ID: ${latestTweetGuid}`);
+        try {
+            const latestTweet = await fetchLatestTweet(username);
+
+            if (!latestTweet) {
+                if (!initialCheckedUsers.has(username)) {
+                    console.log(`[${username}] Initial check complete. No tweets found yet, will monitor for new posts.`);
+                    initialCheckedUsers.add(username);
+                }
+                continue;
             }
-            state.lastTweetGuid = latestTweetGuid;
-            saveState();
+
+            const latestTweetGuid = latestTweet.id;
+            const tweetLink = latestTweet.url;
+            const lastKnownId = state.lastTweetGuids[username];
+
+            if (latestTweetGuid && lastKnownId !== latestTweetGuid) {
+                if (initialCheckedUsers.has(username)) {
+                    console.log(`[${username}] New tweet found: ${tweetLink}`);
+                    const roleMention = roleId ? `<@&${roleId}> ` : '';
+                    const message = `${roleMention}**${username}**さんが新しいツイートを投稿しました！\n${tweetLink}`;
+                    await sendNotification(message);
+                } else {
+                    console.log(`[${username}] Initial check complete. Monitoring after ID: ${latestTweetGuid}`);
+                }
+                state.lastTweetGuids[username] = latestTweetGuid;
+                state.lastTweetGuid = latestTweetGuid;
+                saveState();
+            }
+            initialCheckedUsers.add(username);
+        } catch (error) {
+            console.error(`[${username}] Failed to check Twitter:`, error.message);
         }
-    } catch (error) {
-        console.error('Failed to check Twitter:', error.message);
-    } finally {
-        isInitialTwitterCheck = false;
     }
 }
 
@@ -315,16 +340,15 @@ client.on('ready', async () => {
     // if (config.OBS_WEBSOCKET.enabled) {
     //     startStreamDurationMonitor();
     // }
-    if (config.TWITTER_UPDATES?.enabled) {
+    if (config.TWITTER_UPDATES) {
         console.log('Starting Twitter monitoring via native lightweight GraphQL API...');
-        isInitialTwitterCheck = true;
         checkTwitter();
         setInterval(checkTwitter, (config.CHECK_INTERVAL_SECONDS || 60) * 1000);
     }
 });
 
 client.on('guildScheduledEventCreate', async (event) => {
-    if (!config.EVENT_CREATION.enabled || event.guildId !== config.EVENT_CREATION.serverId) return;
+    if (!config.EVENT_CREATION?.enabled || event.guildId !== config.EVENT_CREATION.serverId) return;
 
     console.log(`New event created: ${event.name}`);
     const message = `<@&${config.EVENT_CREATION.roleId}>\n**イベントが追加**されました\nhttps://discord.com/events/${event.guildId}/${event.id}`;
@@ -332,6 +356,8 @@ client.on('guildScheduledEventCreate', async (event) => {
 });
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
+    if (!config.VOICE_STATE_UPDATES) return;
+
     const joinConfig = config.VOICE_STATE_UPDATES.find(c =>
         c.enabled &&
         c.userId === newState.id &&
