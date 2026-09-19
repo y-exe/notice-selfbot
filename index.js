@@ -331,6 +331,24 @@ function startHeartbeat() {
     setInterval(send, 60 * 1000);
 }
 
+function scheduleNextTwitterCheck() {
+    const minSeconds = config.CHECK_INTERVAL_MIN_SECONDS || 180; // 3分
+    const maxSeconds = config.CHECK_INTERVAL_MAX_SECONDS || 300; // 5分
+    const intervalSeconds = Math.floor(Math.random() * (maxSeconds - minSeconds + 1)) + minSeconds;
+
+    console.log(`Next Twitter check scheduled in ${intervalSeconds}s (${(intervalSeconds / 60).toFixed(1)}m)`);
+
+    setTimeout(async () => {
+        try {
+            await checkTwitter();
+        } catch (error) {
+            console.error('Error during scheduled Twitter check:', error);
+        } finally {
+            scheduleNextTwitterCheck();
+        }
+    }, intervalSeconds * 1000);
+}
+
 client.on('ready', async () => {
     console.log(`Notifier Bot logged in as ${client.user.tag}`);
     loadState();
@@ -341,9 +359,10 @@ client.on('ready', async () => {
     //     startStreamDurationMonitor();
     // }
     if (config.TWITTER_UPDATES) {
-        console.log('Starting Twitter monitoring via native lightweight GraphQL API...');
-        checkTwitter();
-        setInterval(checkTwitter, (config.CHECK_INTERVAL_SECONDS || 60) * 1000);
+        console.log('Starting Twitter monitoring via native lightweight GraphQL API with randomized interval (3-5m)...');
+        checkTwitter().finally(() => {
+            scheduleNextTwitterCheck();
+        });
     }
 });
 
