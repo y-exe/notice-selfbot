@@ -2,13 +2,11 @@ require('dotenv').config();
 const { Client } = require('discord.js-selfbot-v13');
 // const OBSWebSocket = require('obs-websocket-js').default;
 const axios = require('axios');
-const { Scraper } = require('agent-twitter-client');
 const fs = require('fs');
 const path = require('path');
 
 const config = require('./config.json');
 const client = new Client({ checkUpdate: false });
-const scraper = new Scraper();
 // const obs = new OBSWebSocket();
 
 const STATE_FILE_PATH = path.join(__dirname, 'state.json');
@@ -17,6 +15,8 @@ const NOTIFICATION_COOLDOWN_MS = 180 * 1000; // 3分 (通知のクールダウ�
 const STREAM_STOP_GRACE_PERIOD_MS = 180 * 1000; // 3分 (配信停止までの猶予時間)
 const STREAM_DURATION_LIMIT_MS = 11.5 * 60 * 60 * 1000; // 11時間30分 (配信時間の上限)
 
+const TWITTER_BEARER_TOKEN = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+
 let state = { lastTweetGuid: null };
 let notificationCooldowns = {};
 let leaveTimers = {};
@@ -24,13 +24,13 @@ let isStreaming = false;
 let activeOBSSourceInfo = null;
 let streamStartTime = null;
 let isInitialTwitterCheck = true;
-let isTwitterInitialized = false;
+let cachedTwitterUserId = null;
 
 function loadState() {
     if (fs.existsSync(STATE_FILE_PATH)) {
         try {
             state = JSON.parse(fs.readFileSync(STATE_FILE_PATH));
-            console.log('State loaded successfully.');
+            console.log('State loaded successfully. Last known tweet ID:', state.lastTweetGuid);
         } catch (e) {
             console.error('Failed to parse state file.', e);
         }
@@ -124,49 +124,128 @@ function startStreamDurationMonitor() {
 }
 */
 
-async function initTwitterAuth() {
-    if (process.env.TWITTER_AUTH_TOKEN && process.env.TWITTER_CT0) {
-        const cookies = [
-            `auth_token=${process.env.TWITTER_AUTH_TOKEN}; Domain=.twitter.com; Path=/; Secure; HttpOnly`,
-            `ct0=${process.env.TWITTER_CT0}; Domain=.twitter.com; Path=/; Secure`
-        ];
-        if (process.env.TWITTER_TWID) {
-            cookies.push(`twid=${process.env.TWITTER_TWID}; Domain=.twitter.com; Path=/; Secure`);
+async function getTwitterUserId(username, authToken, ct0) {
+    if (cachedTwitterUserId) return cachedTwitterUserId;
+
+    const url = `https://x.com/i/api/graphql/G3KGOASz96M-Qu0nwmGXNg/UserByScreenName?variables=${encodeURIComponent(JSON.stringify({ screen_name: username }))}`;
+    const res = await fetch(url, {
+        headers: {
+            'authorization': `Bearer ${TWITTER_BEARER_TOKEN}`,
+            'cookie': `auth_token=${authToken}; ct0=${ct0}`,
+            'x-csrf-token': ct0,
+            'x-twitter-active-user': 'yes',
+            'x-twitter-auth-type': 'OAuth2Session',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
-        await scraper.setCookies(cookies);
-        isTwitterInitialized = true;
-        console.log('Twitter client authenticated via discrete cookies.');
-        return;
+    });
+
+    if (!res.ok) {
+        throw new Error(`Failed to fetch user profile: HTTP ${res.status}`);
     }
 
-    if (process.env.TWITTER_COOKIES) {
-        let cookies;
-        try {
-            cookies = JSON.parse(process.env.TWITTER_COOKIES);
-        } catch {
-            cookies = process.env.TWITTER_COOKIES.split(';').map(c => c.trim()).filter(Boolean);
+    const data = await res.json();
+    const userId = data?.data?.user?.result?.rest_id;
+    if (!userId) {
+        throw new Error(`User ID not found for ${username}`);
+    }
+
+    cachedTwitterUserId = userId;
+    return userId;
+}
+
+async function fetchLatestTweet(username) {
+    const authToken = process.env.TWITTER_AUTH_TOKEN;
+    const ct0 = process.env.TWITTER_CT0;
+
+    if (!authToken || !ct0) {
+        console.warn('TWITTER_AUTH_TOKEN or TWITTER_CT0 not set. Skipping Twitter check.');
+        return null;
+    }
+
+    const userId = await getTwitterUserId(username, authToken, ct0);
+
+    const variables = {
+        userId: userId,
+        count: 10,
+        includePromotedContent: false,
+        withQuickPromoteEligibilityTweetFields: false,
+        withVoice: false,
+        withV2Timeline: true
+    };
+    const features = {
+        rweb_tipjar_consumption_enabled: true,
+        responsive_web_graphql_exclude_directive_enabled: true,
+        verified_phone_label_enabled: false,
+        creator_subscriptions_tweet_preview_api_enabled: true,
+        responsive_web_graphql_timeline_navigation_enabled: true,
+        responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+        communities_web_enable_tweet_community_results_fetch: true,
+        c9s_tweet_anatomy_moderator_badge_enabled: true,
+        articles_preview_enabled: true,
+        tweetypie_unmention_optimization_enabled: true,
+        responsive_web_edit_tweet_api_enabled: true,
+        graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+        view_counts_everywhere_api_enabled: true,
+        longform_notetweets_consumption_enabled: true,
+        responsive_web_twitter_article_tweet_consumption_enabled: true,
+        tweet_awards_web_tipping_enabled: false,
+        creator_subscriptions_quote_tweet_preview_enabled: false,
+        freedom_of_speech_not_reach_fetch_enabled: true,
+        standardized_nudges_misinfo: true,
+        tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+        rweb_video_timestamps_enabled: true,
+        longform_notetweets_rich_text_read_enabled: true,
+        longform_notetweets_inline_media_enabled: true,
+        responsive_web_enhance_cards_enabled: false
+    };
+
+    const url = `https://x.com/i/api/graphql/V7H0Ap3_Hh2FyS75OCDO3Q/UserTweets?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(features))}`;
+    const res = await fetch(url, {
+        headers: {
+            'authorization': `Bearer ${TWITTER_BEARER_TOKEN}`,
+            'cookie': `auth_token=${authToken}; ct0=${ct0}`,
+            'x-csrf-token': ct0,
+            'x-twitter-active-user': 'yes',
+            'x-twitter-auth-type': 'OAuth2Session',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
-        if (Array.isArray(cookies) && cookies.length > 0) {
-            await scraper.setCookies(cookies);
-            isTwitterInitialized = true;
-            console.log('Twitter client authenticated via TWITTER_COOKIES.');
-            return;
+    });
+
+    if (!res.ok) {
+        throw new Error(`Failed to fetch user tweets: HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const instructions = data?.data?.user?.result?.timeline_v2?.timeline?.instructions || [];
+
+    for (const instr of instructions) {
+        if (instr.type === 'TimelineAddEntries') {
+            for (const entry of instr.entries) {
+                if (entry.content?.entryType === 'TimelineTimelineItem') {
+                    const result = entry.content.itemContent?.tweet_results?.result;
+                    if (!result) continue;
+                    const tweet = result.tweet || result;
+                    const legacy = tweet.legacy;
+                    if (!legacy) continue;
+
+                    const isRetweet = !!legacy.retweeted_status_result;
+                    const isReply = !!legacy.in_reply_to_status_id_str;
+
+                    // リツイートやリプライは除外
+                    if (isRetweet || isReply) continue;
+
+                    const tweetId = legacy.id_str || tweet.rest_id;
+                    return {
+                        id: tweetId,
+                        text: legacy.full_text,
+                        url: `https://fxtwitter.com/${username}/status/${tweetId}`
+                    };
+                }
+            }
         }
     }
 
-    if (process.env.TWITTER_USERNAME && process.env.TWITTER_PASSWORD) {
-        console.log('Logging in to Twitter with username and password...');
-        await scraper.login(
-            process.env.TWITTER_USERNAME,
-            process.env.TWITTER_PASSWORD,
-            process.env.TWITTER_EMAIL
-        );
-        isTwitterInitialized = true;
-        console.log('Twitter client logged in successfully.');
-        return;
-    }
-
-    console.warn('No Twitter credentials found. Please set TWITTER_AUTH_TOKEN & TWITTER_CT0 in environment.');
+    return null;
 }
 
 async function checkTwitter() {
@@ -176,29 +255,14 @@ async function checkTwitter() {
     const roleId = config.TWITTER_UPDATES.roleId;
 
     try {
-        if (!isTwitterInitialized) {
-            await initTwitterAuth();
-        }
+        const latestTweet = await fetchLatestTweet(username);
 
-        const tweetsGenerator = scraper.getTweets(username, 10);
-        let latestNormalTweet = null;
-
-        for await (const tweet of tweetsGenerator) {
-            if (!tweet || !tweet.id) continue;
-            // リツイートやリプライは除外
-            if (tweet.isRetweet || tweet.isReply) continue;
-
-            latestNormalTweet = tweet;
-            break;
-        }
-
-        if (!latestNormalTweet) {
-            console.warn(`No valid tweet found for ${username}`);
+        if (!latestTweet) {
             return;
         }
 
-        const latestTweetGuid = latestNormalTweet.id;
-        const tweetLink = `https://fxtwitter.com/${username}/status/${latestNormalTweet.id}`;
+        const latestTweetGuid = latestTweet.id;
+        const tweetLink = latestTweet.url;
 
         if (latestTweetGuid && state.lastTweetGuid !== latestTweetGuid) {
             if (!isInitialTwitterCheck) {
@@ -213,9 +277,6 @@ async function checkTwitter() {
         }
     } catch (error) {
         console.error('Failed to check Twitter:', error.message);
-        if (error.message && (error.message.includes('401') || error.message.includes('auth') || error.message.includes('Session'))) {
-            isTwitterInitialized = false;
-        }
     } finally {
         isInitialTwitterCheck = false;
     }
@@ -255,7 +316,7 @@ client.on('ready', async () => {
     //     startStreamDurationMonitor();
     // }
     if (config.TWITTER_UPDATES?.enabled) {
-        console.log('Starting Twitter monitoring via lightweight API...');
+        console.log('Starting Twitter monitoring via native lightweight GraphQL API...');
         isInitialTwitterCheck = true;
         checkTwitter();
         setInterval(checkTwitter, (config.CHECK_INTERVAL_SECONDS || 60) * 1000);
