@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   notifier:
     build: .
@@ -12,3 +10,18 @@ services:
       - ./state.json:/app/state.json
     environment:
       - TZ=Asia/Tokyo
+      - TWITTER_PUSH_HOST=0.0.0.0
+      - TWITTER_PUSH_PORT=8787
+  angelic:
+    profiles: [twitter-push]
+    build: .
+    command: ["node", "angelic-start.js"]
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - notifier
+    volumes:
+      - ./angelic-data:/data
+    environment:
+      - WEBHOOK_ENDPOINT=http://notifier:8787/twitter/push

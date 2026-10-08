@@ -3,3 +3,5 @@ node_modules/
 state.json
 *.log
 .DS_Store
+angelic-angel.toml
+angelic-data/

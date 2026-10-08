@@ -4,6 +4,7 @@ const { Client } = require('discord.js-selfbot-v13');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { createPushServer } = require('./twitter-push');
 
 const config = require('./config.json');
 const client = new Client({ checkUpdate: false });
@@ -349,6 +350,7 @@ function scheduleNextTwitterCheck() {
     }, intervalSeconds * 1000);
 }
 
+let twitterPushServer;
 client.on('ready', async () => {
     console.log(`Notifier Bot logged in as ${client.user.tag}`);
     loadState();
@@ -359,6 +361,27 @@ client.on('ready', async () => {
     //     startStreamDurationMonitor();
     // }
     if (config.TWITTER_UPDATES) {
+        if ((process.env.TWITTER_SOURCE || config.TWITTER_SOURCE || 'angelic-angel') === 'angelic-angel') {
+            if (!twitterPushServer) {
+                const targets = Array.isArray(config.TWITTER_UPDATES) ? config.TWITTER_UPDATES : [config.TWITTER_UPDATES];
+                twitterPushServer = createPushServer({
+                    targets, state, saveState, isReady: () => client.isReady(),
+                    send: async message => {
+                        const channel = await client.channels.fetch(config.NOTIFICATION_CHANNEL_ID);
+                        await channel.send(message);
+                    }
+                });
+                twitterPushServer.on('error', error => {
+                    console.error('Twitter push server failed:', error.message);
+                    process.exitCode = 1;
+                    client.destroy();
+                });
+                twitterPushServer.listen(Number(process.env.TWITTER_PUSH_PORT || 8787), process.env.TWITTER_PUSH_HOST || '127.0.0.1', () => {
+                    console.log('Twitter monitoring via Angelic-Angel: POST /twitter/push');
+                });
+            }
+            return;
+        }
         console.log('Starting Twitter monitoring via native lightweight GraphQL API with randomized interval (3-5m)...');
         checkTwitter().finally(() => {
             scheduleNextTwitterCheck();

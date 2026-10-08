@@ -1,16 +1,53 @@
-# 高機能Discord自動通知 & 自動配信Self-Bot
+<div align="center">
+<h1>Discord通知Self-Bot</h1>
 
-特定のDiscordサーバーのアクティビティやSNSの更新を監視し、指定されたチャンネルに自動で通知を送信する、通知Botです。
-OBS Studioと連携し、特定のユーザーのボイスチャンネル入退室をトリガーに、**YouTube配信を自動で開始・停止**、さらには**配信シーン内のソース表示を制御**する機能を持ちます。
+[![Node.js](https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![discord.js-selfbot-v13](https://img.shields.io/badge/discord.js--selfbot--v13-5865F2?style=flat-square&logo=discord&logoColor=white)](https://github.com/aiko-chan-ai/discord.js-selfbot-v13)
+[![Angelic-Angel](https://img.shields.io/badge/X-Web%20Push-000000?style=flat-square&logo=x&logoColor=white)](https://github.com/sh1ma/Angelic-Angel)
 
-## 主な機能
+Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお知らせするSelf-Botです。
+</div>
+<br/>
 
-1.  **Discordイベント通知**: サーバーで新しいイベントが作成された際に通知します。
-2.  **Twitter更新通知**: Nitterを1分ごとにスクレイピングし、特定ユーザーの新規ツイート（リプライ、リツイートを除く）を検知して通知します。
-3.  **ボイスチャンネル入室通知**: 特定ユーザーが指定のボイスチャンネルに入室した際に通知します。
-    *   **再接続対応**: 通知後、3分以内の再入室は無視し、不要な通知の重複を防ぎます。
-4.  **OBS連携による自動配信**:
-    *   ターゲットユーザーのVC入室を検知すると、OBSの配信を自動で開始します。
-    *   配信の種類（ステージ/作業配信）に応じて、OBS上の特定のソースの表示/非表示を自動で切り替えます。
-    *   **遅延停止機能**: ユーザーがVCから退出しても即座に配信を停止せず、**3分間の猶予期間**を設けます。3分以内にユーザーが戻ってきた場合は配信を続行し、戻ってこなかった場合のみ配信を停止します。
-    *   **長時間配信対策**: 配信開始から**11時間30分**が経過すると、自動的に配信を停止し、YouTubeの12時間制限による配信切れを防ぎます。
+## なんのためにつくった...?
+
+イベントの追加やステージ・作業配信の開始、対象ユーザーの投稿をDiscordでまとめて確認するために作りました。
+通知ごとにロールをメンションできます。
+
+## 軽い説明
+
+Discordのイベントを監視し、設定したユーザーの活動を通知します。
+Xの投稿は [Angelic-Angel](https://github.com/sh1ma/Angelic-Angel) 経由でWeb Pushを受信します。
+使用するXアカウントで対象ユーザーをフォローし、投稿通知をオンにしてください。
+
+## 特徴など...
+
+* **イベント通知:** 指定サーバーの新しいイベントをリンク付きで通知します。
+* **VC入室通知:** 指定ユーザーの入室を通知します。通知のクールダウンは3分です。
+* **X投稿通知:** 対象ユーザーの投稿リンクを通知し、投稿IDで重複を除外します。
+* **外形監視:** 任意の監視先へ1分ごとにハートビートを送ります。
+
+OBS連携は現在無効です。配信の自動開始・停止は動作しません。
+X通知はホームTL全体の取得ではなく、全投稿の配送やリプライ・リポスト除外は保証しません。
+
+## セットアップ
+
+`.env` に `DISCORD_TOKEN`・`TWITTER_AUTH_TOKEN`・`TWITTER_CT0` を設定し、`config.json` に通知先と監視対象を指定します。
+`state.json` がなければ `{}` を内容とするファイルを作成してください。
+
+```bash
+docker compose --profile twitter-push up -d --build
+```
+
+Angelic-Angelの初回登録は自動です。認証情報と登録情報はGitに含めません。
+設定項目やログの確認方法は [運用ドキュメント](docs/operations.md) にまとめています。
+
+## 本番の更新
+
+`main` へのpush → GitHub ActionsでGHCRにイメージ公開 → Image Updater / Argo CDでk3sへ反映します。
+本番のマニフェストは [vpsリポジトリ](https://github.com/y-exe/vps) で管理しています。
+本番の監視対象はPVC上の設定を使用するため、このリポジトリの `config.json` をpushしても上書きされません。
+
+---
+
+© 2026 yexe
