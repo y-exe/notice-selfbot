@@ -6,3 +6,6 @@ node_modules
 state.json
 angelic-data
 angelic-angel.toml
+README.md
+docs
+.github

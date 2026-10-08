@@ -6,9 +6,9 @@ RUN cargo build --release --locked
 
 FROM node:22-trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3t64 && rm -rf /var/lib/apt/lists/*
-COPY --from=angelic-builder /src/target/release/angelic-angel /usr/local/bin/angelic-angel
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=angelic-builder /src/target/release/angelic-angel /usr/local/bin/angelic-angel
 COPY . .
 CMD ["node", "index.js"]

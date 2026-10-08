@@ -5,8 +5,14 @@ on:
     branches: [ "main" ]
     paths-ignore:
       - 'README.md'
+      - 'docs/**'
       - '.gitignore'
   workflow_dispatch:
+
+# Finish exporting the cache before the next build imports it.
+concurrency:
+  group: ghcr-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -57,5 +63,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=notice-selfbot
+            type=gha,scope=buildkit
+          cache-to: type=gha,scope=notice-selfbot,mode=max
