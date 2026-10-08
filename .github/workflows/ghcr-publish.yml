@@ -9,7 +9,6 @@ on:
       - '.gitignore'
   workflow_dispatch:
 
-# Finish exporting the cache before the next build imports it.
 concurrency:
   group: ghcr-${{ github.ref }}
   cancel-in-progress: false
@@ -37,7 +36,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Test Twitter push receiver
+      - name: Test
         run: npm test
 
       - name: Log in to the Container registry

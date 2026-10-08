@@ -1,54 +1,42 @@
 {
-  "NOTIFICATION_CHANNEL_ID": "1387147242695168103",
-  "TWITTER_SOURCE": "angelic-angel",
-  "CHECK_INTERVAL_MIN_SECONDS": 180,
-  "CHECK_INTERVAL_MAX_SECONDS": 300,
-  "EVENT_CREATION": {
-    "enabled": true,
-    "serverId": "1355073968532619376",
-    "roleId": "1387143466399694899"
-  },
-  "VOICE_STATE_UPDATES": [
-    {
-      "enabled": true,
-      "type": "ステージ",
-      "serverId": "1355073968532619376",
-      "userId": "1213362372014772255",
-      "channelId": "1355496498854363309",
-      "roleId": "1387143604027261018",
-      "obsSettings": {
-        "sceneName": "Teruki_Discord",
-        "sourceName": "ステージ"
-      }
+    "NOTIFICATION_CHANNEL_ID": "1387147242695168103",
+    "TWITTER_SOURCE": "angelic-angel",
+    "CHECK_INTERVAL_MIN_SECONDS": 180,
+    "CHECK_INTERVAL_MAX_SECONDS": 300,
+    "EVENT_CREATION": {
+        "enabled": true,
+        "serverId": "1355073968532619376",
+        "roleId": "1387143466399694899"
     },
-    {
-      "enabled": true,
-      "type": "作業配信",
-      "serverId": "1355073968532619376",
-      "userId": "1213362372014772255",
-      "channelId": "1369287084963270727",
-      "roleId": "1387143553565720720",
-      "obsSettings": {
-        "sceneName": "Teruki_Discord",
-        "sourceName": "作業配信"
-      }
-    }
-  ],
-  "TWITTER_UPDATES": [
-    {
-      "enabled": false,
-      "username": "u031f",
-      "roleId": null,
-      "_comment": "動作検証用テストアカウント（必要時に enabled: true に切り替え）"
-    },
-    {
-      "enabled": true,
-      "username": "YamakawaTeruki",
-      "roleId": "1387143641058902036"
-    }
-  ],
-  "OBS_WEBSOCKET": {
-    "enabled": false,
-    "address": "ws://localhost:4455"
-  }
+    "VOICE_STATE_UPDATES": [
+        {
+            "enabled": true,
+            "type": "ステージ",
+            "serverId": "1355073968532619376",
+            "userId": "1213362372014772255",
+            "channelId": "1355496498854363309",
+            "roleId": "1387143604027261018"
+        },
+        {
+            "enabled": true,
+            "type": "作業配信",
+            "serverId": "1355073968532619376",
+            "userId": "1213362372014772255",
+            "channelId": "1369287084963270727",
+            "roleId": "1387143553565720720"
+        }
+    ],
+    "TWITTER_UPDATES": [
+        {
+            "enabled": false,
+            "username": "u031f",
+            "roleId": null,
+            "_comment": "動作検証用テストアカウント（必要時に enabled: true に切り替え）"
+        },
+        {
+            "enabled": true,
+            "username": "YamakawaTeruki",
+            "roleId": "1387143641058902036"
+        }
+    ]
 }

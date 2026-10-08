@@ -20,7 +20,7 @@ Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお�
 
 ## 軽い説明
 
-`index.js` がDiscordのイベントを監視します。Xの投稿通知は [Angelic-Angel](https://github.com/sh1ma/Angelic-Angel) がWeb Pushを受信し、ローカルWebhookへ転送します。
+`index.js` から `src/app.js` を起動し、各機能のモジュールがDiscordのイベントを監視します。Xの投稿通知は [Angelic-Angel](https://github.com/sh1ma/Angelic-Angel) がWeb Pushを受信し、ローカルWebhookへ転送します。
 受信側が `config.json` の対象ユーザーを照合し、投稿へのリンクをDiscordに送信します。
 
 通知を受け取るXアカウントで、対象ユーザーのフォローと投稿通知の有効化が必要です。
@@ -33,7 +33,7 @@ Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお�
 * **X投稿通知:** 投稿URLをDiscordに通知し、直近1000件の投稿IDを保存して重複を除外します。
 * **外形監視:** `WATCHER_PUSH_URL` を設定すると、1分ごとにハートビートを送ります。
 
-OBS連携のコードは現在コメントアウトされています。配信の自動開始・停止、シーンやソースの切り替えは動作しません。
+配信の自動開始・停止、シーンやソースの切り替えには対応していません。
 コマンド操作はなく、設定ファイルで監視対象を指定します。
 
 ## 設定
@@ -127,7 +127,7 @@ Xが通知しない投稿や停止中の投稿をTL取得で補完しません�
 上流はWebhookのHTTPエラーに対して再送しないため、Discord送信失敗時に通知が失われる可能性があります。
 
 従来方式へ戻す場合は本番Deploymentの `TWITTER_SOURCE` を `graphql` に変更し、Angelic-Angelのコンテナを外します。
-`twitter_scraper.py` は旧Nitter取得用で、現行の起動処理からは使いません。
+旧Nitter取得用のPythonスクリプトは削除済みです。アプリケーションの実装はJavaScriptに統一しています。
 
 ---
 

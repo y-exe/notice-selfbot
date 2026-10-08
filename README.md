@@ -27,7 +27,7 @@ Xの投稿は [Angelic-Angel](https://github.com/sh1ma/Angelic-Angel) 経由でW
 * **X投稿通知:** 対象ユーザーの投稿リンクを通知し、投稿IDで重複を除外します。
 * **外形監視:** 任意の監視先へ1分ごとにハートビートを送ります。
 
-OBS連携は現在無効です。配信の自動開始・停止は動作しません。
+配信の自動開始・停止には対応していません。
 X通知はホームTL全体の取得ではなく、全投稿の配送やリプライ・リポスト除外は保証しません。
 
 ## セットアップ
@@ -47,6 +47,11 @@ Angelic-Angelの初回登録は自動です。認証情報と登録情報はGit�
 `main` へのpush → GitHub ActionsでGHCRにイメージ公開 → Image Updater / Argo CDでk3sへ反映します。
 本番のマニフェストは [vpsリポジトリ](https://github.com/y-exe/vps) で管理しています。
 本番の監視対象はPVC上の設定を使用するため、このリポジトリの `config.json` をpushしても上書きされません。
+
+## ファイル構成
+
+`src/discord` にイベント・VC通知、`src/twitter` にX通知、`src/storage` に状態保存、`src/monitoring` に監視処理をまとめています。
+`src/app.js` が各機能を組み立て、ルートの `index.js` は起動だけを担当します。テストは `tests` にあります。
 
 ---
 
