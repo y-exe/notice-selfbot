@@ -7,6 +7,7 @@ const {
     feedUrl,
     shortUrl,
     sameChannelId,
+    isPlaceholderFeed,
     parseFeedEntries,
     resolveChannelIdFromHtml,
 } = require('../src/youtube/feed');
@@ -128,6 +129,27 @@ test('フィードのチャンネルIDはUC接頭辞なしでも照合する', a
         logger: { log() {}, warn() {}, error() {} },
     });
     assert.equal(state.lastYoutubeVideoIds[CHANNEL_A], 'V1');
+});
+
+test('仮フィードは異常扱いで再試行させる', async () => {
+    const placeholder =
+        '<?xml version="1.0" encoding="utf-8"?>\n<!--\n  This is a static file.\n-->\n' +
+        '<feed xmlns="http://www.w3.org/2005/Atom"><title>YouTube video feed</title></feed>';
+    assert.equal(isPlaceholderFeed(placeholder), true);
+    assert.equal(isPlaceholderFeed(sampleFeed(CHANNEL_A, [])), false);
+    const state = {};
+    await assert.rejects(
+        checkYoutubeTarget({
+            target: { handle: 'H', channelId: CHANNEL_A },
+            state,
+            saveState: () => {},
+            send: async () => {},
+            fetchImpl: stubFetch({ [feedUrl(CHANNEL_A)]: placeholder }),
+            logger: { log() {}, warn() {}, error() {} },
+        }),
+        /仮フィード/,
+    );
+    assert.deepEqual(state.lastYoutubeVideoIds, {});
 });
 
 test('ハンドルページはcanonicalのIDを優先する', () => {

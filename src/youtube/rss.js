@@ -1,4 +1,4 @@
-const { feedUrl, parseFeedEntries, sameChannelId, YOUTUBE_USER_AGENT } = require('./feed');
+const { feedUrl, parseFeedEntries, sameChannelId, isPlaceholderFeed, YOUTUBE_USER_AGENT } = require('./feed');
 const { channelKey, ensureYoutubeState, sendYoutubeVideo } = require('./notify');
 
 function feedMetaKey(target) {
@@ -89,6 +89,10 @@ async function checkYoutubeTarget({
         lastModified: meta.lastModified,
     });
     if (feed.notModified) return;
+    if (isPlaceholderFeed(feed.xml))
+        throw new Error(
+            `YouTubeから仮フィードが返されました (${target.handle || target.channelId})。レート制限の可能性があり次回再試行します`,
+        );
     if (feed.etag || feed.lastModified) {
         state.youtubeFeedMeta[key] = {
             ...(feed.etag ? { etag: feed.etag } : {}),

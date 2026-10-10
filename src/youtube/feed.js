@@ -66,6 +66,15 @@ function parseFeedEntries(xml) {
     return entries;
 }
 
+// YouTubeはレート制限時などにHTTP 200で仮フィードを返すことがある。
+// これを正常な「新着なし」と区別し、再試行させる。
+function isPlaceholderFeed(xml) {
+    return (
+        typeof xml === 'string' &&
+        (xml.includes('This is a static file') ||
+            xml.includes('<title>YouTube video feed</title>'))
+    );
+}
 // ハンドルページのHTMLからチャンネルIDを抜き出す。
 // ページ内に他チャンネルのIDも含まれるため、所有者を示すcanonicalを優先する。
 function resolveChannelIdFromHtml(html) {
@@ -90,6 +99,7 @@ module.exports = {
     feedUrl,
     shortUrl,
     sameChannelId,
+    isPlaceholderFeed,
     parseFeedEntries,
     resolveChannelIdFromHtml,
 };
