@@ -128,7 +128,7 @@ Node.jsで受信側だけ試す場合は `npm ci` → `npm start` で起動で�
 
 ## YouTube通知の仕組み
 
-WebSub(即時Push)を本命、RSSポーリング(180〜300秒)を補完に使います。`YOUTUBE_WEBSUB_BASE_URL` 未設定のローカル・現行PodではRSSのみで動作します。
+Data API(一次取得)を本命、RSSポーリング(補完・API失敗時のフォールバック)、WebSub(即時Push・公開URLがある場合のみ)を併用します。`YOUTUBE_WEBSUB_BASE_URL` 未設定のローカル・現行PodではWebSubなしで動作します。PodのIPv6 egressがYouTube RSSでスロットルされる実測があるため、IPv4優先(`NODE_OPTIONS=--dns-result-order=ipv4first`)で取得します。
 
 * 通知URLは常に `https://youtu.be/動画ID` の最短形です。
 * 動画ID単位(直近1000件)で重複除外するため、ライブ終了後に同じIDでアーカイブ公開されても再通知しません。

@@ -1,4 +1,5 @@
 const { feedUrl, parseFeedEntries, sameChannelId, isPlaceholderFeed, YOUTUBE_USER_AGENT } = require('./feed');
+const { fetchLatestVideos } = require('./api');
 const { channelKey, ensureYoutubeState, sendYoutubeVideo } = require('./notify');
 
 function feedMetaKey(target) {
@@ -79,41 +80,62 @@ async function checkYoutubeTarget({
         return;
     }
     ensureYoutubeState(state);
-    if (!state.youtubeFeedMeta || typeof state.youtubeFeedMeta !== 'object')
-        state.youtubeFeedMeta = {};
-    const key = feedMetaKey(target);
-    const meta = state.youtubeFeedMeta[key] || {};
-    const feed = await fetchFeed(target.channelId, {
-        fetchImpl,
-        etag: meta.etag,
-        lastModified: meta.lastModified,
-    });
-    if (feed.notModified) return;
-    if (isPlaceholderFeed(feed.xml))
-        throw new Error(
-            `YouTubeから仮フィードが返されました (${target.handle || target.channelId})。レート制限の可能性があり次回再試行します`,
-        );
-    if (!feed.xml || !feed.xml.includes('<feed'))
-        throw new Error(
-            `YouTubeフィードの形式が不正です (${target.handle || target.channelId})。次回再試行します`,
-        );
-    if (feed.etag || feed.lastModified) {
-        state.youtubeFeedMeta[key] = {
-            ...(feed.etag ? { etag: feed.etag } : {}),
-            ...(feed.lastModified ? { lastModified: feed.lastModified } : {}),
-        };
+    // Data APIを一次取得に使う。API失敗時のみRSSにフォールバックする。
+    let entries = null;
+    if (apiKey) {
+        try {
+            const videos = await fetchLatestVideos({
+                channelId: target.channelId,
+                apiKey,
+                fetchImpl,
+            });
+            if (!videos.length)
+                throw new Error('結果が空でした');
+            entries = sortByPublished(videos);
+        } catch (error) {
+            entries = null;
+            logger.warn?.(
+                `YouTube Data APIの取得に失敗したためRSSで再試行します (${target.handle || target.channelId}): ${error.message}`,
+            );
+        }
     }
-    const parsed = parseFeedEntries(feed.xml);
-    const entries = sortByPublished(
-        parsed.filter(
-            (entry) =>
-                !entry.channelId || sameChannelId(entry.channelId, target.channelId),
-        ),
-    );
-    if (parsed.length && !entries.length) {
-        logger.warn?.(
-            `YouTubeフィードの全件が別チャンネル扱いで除外されました: ${target.handle || target.channelId}`,
+    if (!entries) {
+        if (!state.youtubeFeedMeta || typeof state.youtubeFeedMeta !== 'object')
+            state.youtubeFeedMeta = {};
+        const key = feedMetaKey(target);
+        const meta = state.youtubeFeedMeta[key] || {};
+        const feed = await fetchFeed(target.channelId, {
+            fetchImpl,
+            etag: meta.etag,
+            lastModified: meta.lastModified,
+        });
+        if (feed.notModified) return;
+        if (isPlaceholderFeed(feed.xml))
+            throw new Error(
+                `YouTubeから仮フィードが返されました (${target.handle || target.channelId})。レート制限の可能性があり次回再試行します`,
+            );
+        if (!feed.xml || !feed.xml.includes('<feed'))
+            throw new Error(
+                `YouTubeフィードの形式が不正です (${target.handle || target.channelId})。次回再試行します`,
+            );
+        if (feed.etag || feed.lastModified) {
+            state.youtubeFeedMeta[key] = {
+                ...(feed.etag ? { etag: feed.etag } : {}),
+                ...(feed.lastModified ? { lastModified: feed.lastModified } : {}),
+            };
+        }
+        const parsed = parseFeedEntries(feed.xml);
+        entries = sortByPublished(
+            parsed.filter(
+                (entry) =>
+                    !entry.channelId || sameChannelId(entry.channelId, target.channelId),
+            ),
         );
+        if (parsed.length && !entries.length) {
+            logger.warn?.(
+                `YouTubeフィードの全件が別チャンネル扱いで除外されました: ${target.handle || target.channelId}`,
+            );
+        }
     }
     if (!entries.length) {
         saveState();

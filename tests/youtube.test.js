@@ -20,6 +20,10 @@ const {
     enrichVideos,
 } = require('../src/youtube/rss');
 const {
+    fetchLatestVideos,
+    uploadsPlaylistId,
+} = require('../src/youtube/api');
+const {
     callbackUrlFor,
     signatureValid,
     createWebsubServer,
@@ -53,8 +57,31 @@ function sampleFeed(channelId, videos) {
     );
 }
 
-function stubFetch(xmlByUrl, apiById = {}) {
+function stubFetch(xmlByUrl, apiById = {}, playlistById = {}) {
     return async (url) => {
+        const urlString = String(url);
+        if (urlString.includes('googleapis.com/youtube/v3/playlistItems')) {
+            const playlistId = new URL(urlString).searchParams.get('playlistId');
+            if (!(playlistId in playlistById))
+                return { ok: false, status: 500, json: async () => ({}) };
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    items: playlistById[playlistId].map((v) => ({
+                        snippet: {
+                            title: v.title,
+                            publishedAt: v.published,
+                            channelTitle: 'Test',
+                        },
+                        contentDetails: {
+                            videoId: v.id,
+                            videoPublishedAt: v.published,
+                        },
+                    })),
+                }),
+            };
+        }
         if (String(url).includes('googleapis.com')) {
             const ids = new URL(url).searchParams.get('id').split(',');
             return {
@@ -238,6 +265,62 @@ test('RSS初回は通知せず基準保存、差分のみ通知する', async ()
     });
     assert.equal(messages.length, 1);
     assert.match(messages[0], /youtu\.be\/V2/);
+});
+
+test('Data APIを一次取得に使い、失敗時はRSSにフォールバックする', async () => {
+    assert.equal(uploadsPlaylistId(CHANNEL_A), CHANNEL_A.replace(/^UC/, 'UU'));
+    const playlistId = uploadsPlaylistId(CHANNEL_A);
+    const apiVideos = [{ id: 'A1', title: 'api動画', published: '2026-10-10T00:00:00+00:00' }];
+    const fetched = await fetchLatestVideos({
+        channelId: CHANNEL_A,
+        apiKey: 'key',
+        fetchImpl: stubFetch({}, {}, { [playlistId]: apiVideos }),
+    });
+    assert.equal(fetched.length, 1);
+    assert.equal(fetched[0].videoId, 'A1');
+    assert.equal(fetched[0].channelId, CHANNEL_A);
+    // API成功時はRSSに触れず基準保存する(RSS側は未登録=404)
+    {
+        const state = {};
+        const messages = [];
+        const calls = [];
+        const counting = async (url, options) => {
+            calls.push(String(url));
+            return stubFetch({}, {}, { [playlistId]: apiVideos })(url, options);
+        };
+        await checkYoutubeTarget({
+            target: { handle: 'H', channelId: CHANNEL_A },
+            state,
+            saveState: () => {},
+            send: async (m) => messages.push(m),
+            fetchImpl: counting,
+            apiKey: 'key',
+            logger: { log() {}, warn() {}, error() {} },
+        });
+        assert.equal(state.lastYoutubeVideoIds[CHANNEL_A], 'A1');
+        assert.equal(messages.length, 0);
+        assert.ok(calls.some((u) => u.includes('playlistItems')));
+        assert.ok(!calls.some((u) => u.includes('feeds/videos.xml')));
+    }
+    // API失敗時はRSSにフォールバックする
+    {
+        const state = {};
+        const messages = [];
+        const xml = sampleFeed(CHANNEL_A, [
+            { id: 'R1', title: 'rss動画', published: '2026-10-10T00:00:00+00:00' },
+        ]);
+        await checkYoutubeTarget({
+            target: { handle: 'H', channelId: CHANNEL_A },
+            state,
+            saveState: () => {},
+            send: async (m) => messages.push(m),
+            fetchImpl: stubFetch({ [feedUrl(CHANNEL_A)]: xml }, {}, {}),
+            apiKey: 'key',
+            logger: { log() {}, warn() {}, error() {} },
+        });
+        assert.equal(state.lastYoutubeVideoIds[CHANNEL_A], 'R1');
+        assert.equal(messages.length, 0);
+    }
 });
 
 test('Data API補強でライブ状態を判定する', async () => {
