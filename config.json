@@ -38,5 +38,20 @@
             "username": "YamakawaTeruki",
             "roleId": "1387143641058902036"
         }
+    ],
+    "YOUTUBE_UPDATES": [
+        {
+            "enabled": true,
+            "handle": "YamakawaTeruki",
+            "channelId": "UCdd64FlemydZH2Xq1PsmCAA",
+            "roleId": "1387143641058902036"
+        },
+        {
+            "enabled": true,
+            "handle": "Yamakawa1",
+            "channelId": "UCco1wyybgwsOnfHxyW3aXNQ",
+            "roleId": "1387143641058902036",
+            "_comment": "サブch想定で同ロールに設定。変える場合はここを編集"
+        }
     ]
 }

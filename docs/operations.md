@@ -31,6 +31,7 @@ Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお�
 * **イベント通知:** 指定サーバーでイベントが作成されると、リンクを通知します。
 * **VC入室通知:** 指定ユーザーが対象チャンネルに入ると通知します。同じ対象チャンネルへの通知には3分のクールダウンがあります。
 * **X投稿通知:** 投稿URLをDiscordに通知し、直近1000件の投稿IDを保存して重複を除外します。
+* **YouTube通知:** WebSubのPush(即時)とRSSポーリング(補完)の併用で動画・ライブ配信を通知します。URLは `youtu.be` の最短形、動画ID単位で重複除外するためライブ終了後のアーカイブ化で2重通知しません。
 * **外形監視:** `WATCHER_PUSH_URL` を設定すると、1分ごとにハートビートを送ります。
 
 配信の自動開始・停止、シーンやソースの切り替えには対応していません。
@@ -47,7 +48,10 @@ Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお�
 | `VOICE_STATE_UPDATES` | VC通知の対象ユーザー・サーバー・チャンネル・ロール |
 | `TWITTER_UPDATES` | Xの対象ユーザー・有効化・ロール |
 | `TWITTER_SOURCE` | 標準 `angelic-angel`。従来方式 `graphql` |
-| `CHECK_INTERVAL_MIN_SECONDS` / `CHECK_INTERVAL_MAX_SECONDS` | GraphQL取得間隔。標準180〜300秒 |
+| `CHECK_INTERVAL_MIN_SECONDS` / `CHECK_INTERVAL_MAX_SECONDS` | GraphQL・YouTube RSS取得間隔。標準180〜300秒 |
+| `YOUTUBE_UPDATES` | YouTubeの対象ハンドル・チャンネルID・有効化・ロール |
+| `YOUTUBE_CHECK_INTERVAL_MIN_SECONDS` / `YOUTUBE_CHECK_INTERVAL_MAX_SECONDS` | YouTube RSS取得間隔(未設定時はCHECK_INTERVALを使用) |
+| `YOUTUBE_WEBSUB_BASE_URL` | WebSubコールバックの公開HTTPSベースURL。未設定時はRSSのみ |
 
 `TWITTER_UPDATES` は配列で複数のユーザーを登録できます。`enabled: false` の対象は通知しません。
 `roleId: null` ならメンションしません。`state.json` は再起動後も保持してください。
@@ -62,6 +66,11 @@ Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお�
 | `WEBHOOK_ENDPOINT` | Angelic-Angelの送信先 |
 | `ANGELIC_CONFIG_PATH` | 登録情報の保存先。標準 `/data/angelic-angel.toml` |
 | `TWITTER_PUSH_HOST` / `TWITTER_PUSH_PORT` | Botの受信先。標準 `127.0.0.1:8787` |
+| `YOUTUBE_API_KEY` | 任意。設定するとData APIでライブ状態(開始/予定)とタイトルを補強 |
+| `YOUTUBE_WEBSUB_BASE_URL` | 任意。設定ファイルより優先するWebSubコールバックの公開ベースURL |
+| `YOUTUBE_WEBSUB_HOST` / `YOUTUBE_WEBSUB_PORT` | WebSub受信先。標準 `127.0.0.1:8788` |
+| `YOUTUBE_WEBSUB_SECRET` | 任意。WebSub通知のHMAC署名検証用 |
+| `YOUTUBE_WEBSUB_LEASE_SECONDS` | 任意。購読期間(秒)。標準432000(5日)、8割経過で自動再登録 |
 | `WATCHER_PUSH_URL` | 任意のハートビート送信先 |
 
 トークン・Cookie・登録情報はGitに含めません。
@@ -100,6 +109,7 @@ Dockerを起動し、`.env` に以下を設定します。
 DISCORD_TOKEN=your_discord_token
 TWITTER_AUTH_TOKEN=your_x_auth_token
 TWITTER_CT0=your_x_ct0
+YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
 `config.json` の通知先と対象ユーザーを設定し、Xでフォロー・投稿通知をオンにしてください。
@@ -115,6 +125,18 @@ Webhookのポートはホストに公開せず、Compose内部からだけ接続
 
 Node.jsで受信側だけ試す場合は `npm ci` → `npm start` で起動できます。Angelic-Angelは別途必要です。
 受信処理のテストは `npm test` です。
+
+## YouTube通知の仕組み
+
+WebSub(即時Push)を本命、RSSポーリング(180〜300秒)を補完に使います。`YOUTUBE_WEBSUB_BASE_URL` 未設定のローカル・現行PodではRSSのみで動作します。
+
+* 通知URLは常に `https://youtu.be/動画ID` の最短形です。
+* 動画ID単位(直近1000件)で重複除外するため、ライブ終了後に同じIDでアーカイブ公開されても再通知しません。
+* `YOUTUBE_API_KEY` があると開始/予定/投稿を区別します。なければRSSの情報で汎用文になります。
+* 初回観測時は最新を基準として保存だけし、過去分を遡って通知しません。
+* RSSは1秒連打せず、条件付き取得(`If-None-Match`等)+取得失敗時のバックオフで取得します。
+
+本番でWebSubを使う場合は `vps` 側に公開HTTPSのIngressと `YOUTUBE_WEBSUB_BASE_URL` の設定が必要です(現行はX同様に外部公開なし)。
 
 ## X通知の制限
 

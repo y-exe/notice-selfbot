@@ -10,4 +10,10 @@ function twitterTargets(config) {
         (t) => t && t.enabled !== false,
     );
 }
-module.exports = { root, loadConfig, twitterTargets };
+function youtubeTargets(config) {
+    const targets = (config || {}).YOUTUBE_UPDATES;
+    return (Array.isArray(targets) ? targets : targets ? [targets] : []).filter(
+        (t) => t && t.enabled !== false,
+    );
+}
+module.exports = { root, loadConfig, twitterTargets, youtubeTargets };
