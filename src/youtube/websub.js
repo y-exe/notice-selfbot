@@ -1,6 +1,6 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { feedUrl, parseFeedEntries, YOUTUBE_HUB_URL } = require('./feed');
+const { feedUrl, parseFeedEntries, sameChannelId, YOUTUBE_HUB_URL } = require('./feed');
 const {
     channelKey,
     ensureYoutubeState,
@@ -80,7 +80,8 @@ function createWebsubServer({
         const entries = parseFeedEntries(xml)
             .filter(
                 (entry) =>
-                    !entry.channelId || entry.channelId === target.channelId,
+                    !entry.channelId ||
+                    sameChannelId(entry.channelId, target.channelId),
             )
             .sort((a, b) =>
                 (a.published || a.updated || '').localeCompare(

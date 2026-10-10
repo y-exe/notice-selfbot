@@ -8,6 +8,15 @@ function feedUrl(channelId) {
     return `${YOUTUBE_FEED_BASE}?channel_id=${channelId}`;
 }
 
+// フィード内の yt:channelId は "UC" 接頭辞が付かないことがあるため、
+// 比較時は接頭辞の有無を吸収する。
+function sameChannelId(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const strip = (id) => id.replace(/^UC/, '');
+    return strip(a) === strip(b);
+}
+
 // 通知URLは常に https://youtu.be/動画ID の最短形にする
 function shortUrl(videoId) {
     return `https://youtu.be/${videoId}`;
@@ -80,6 +89,7 @@ module.exports = {
     YOUTUBE_USER_AGENT,
     feedUrl,
     shortUrl,
+    sameChannelId,
     parseFeedEntries,
     resolveChannelIdFromHtml,
 };

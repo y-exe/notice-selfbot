@@ -6,6 +6,7 @@ const path = require('node:path');
 const {
     feedUrl,
     shortUrl,
+    sameChannelId,
     parseFeedEntries,
     resolveChannelIdFromHtml,
 } = require('../src/youtube/feed');
@@ -101,6 +102,32 @@ test('Atomフィードをパースし実体参照を戻す', () => {
     assert.equal(entries[0].title, 'A & B');
     assert.equal(entries[0].channelId, CHANNEL_A);
     assert.deepEqual(parseFeedEntries('not xml'), []);
+});
+
+test('フィードのチャンネルIDはUC接頭辞なしでも照合する', async () => {
+    assert.equal(sameChannelId(CHANNEL_A, CHANNEL_A), true);
+    assert.equal(sameChannelId(CHANNEL_A, CHANNEL_A.replace(/^UC/, '')), true);
+    assert.equal(sameChannelId(CHANNEL_A, CHANNEL_B), false);
+    assert.equal(sameChannelId('', CHANNEL_A), false);
+    // 実フィードはentryのyt:channelIdからUCが落ちる
+    const stripped = CHANNEL_A.replace(/^UC/, '');
+    const xml = sampleFeed(CHANNEL_A, [
+        { id: 'V1', title: 'v1', published: '2026-10-10T00:00:00+00:00' },
+    ]).replaceAll(`<yt:channelId>${CHANNEL_A}</yt:channelId>`, `<yt:channelId>${stripped}</yt:channelId>`);
+    const parsed = parseFeedEntries(xml);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].channelId, stripped);
+    const state = {};
+    const messages = [];
+    await checkYoutubeTarget({
+        target: { handle: 'H', channelId: CHANNEL_A },
+        state,
+        saveState: () => {},
+        send: async (m) => messages.push(m),
+        fetchImpl: stubFetch({ [feedUrl(CHANNEL_A)]: xml }),
+        logger: { log() {}, warn() {}, error() {} },
+    });
+    assert.equal(state.lastYoutubeVideoIds[CHANNEL_A], 'V1');
 });
 
 test('ハンドルページはcanonicalのIDを優先する', () => {

@@ -1,4 +1,4 @@
-const { feedUrl, parseFeedEntries, YOUTUBE_USER_AGENT } = require('./feed');
+const { feedUrl, parseFeedEntries, sameChannelId, YOUTUBE_USER_AGENT } = require('./feed');
 const { channelKey, ensureYoutubeState, sendYoutubeVideo } = require('./notify');
 
 function feedMetaKey(target) {
@@ -95,11 +95,18 @@ async function checkYoutubeTarget({
             ...(feed.lastModified ? { lastModified: feed.lastModified } : {}),
         };
     }
+    const parsed = parseFeedEntries(feed.xml);
     const entries = sortByPublished(
-        parseFeedEntries(feed.xml).filter(
-            (entry) => !entry.channelId || entry.channelId === target.channelId,
+        parsed.filter(
+            (entry) =>
+                !entry.channelId || sameChannelId(entry.channelId, target.channelId),
         ),
     );
+    if (parsed.length && !entries.length) {
+        logger.warn?.(
+            `YouTubeフィードの全件が別チャンネル扱いで除外されました: ${target.handle || target.channelId}`,
+        );
+    }
     if (!entries.length) {
         saveState();
         return;
