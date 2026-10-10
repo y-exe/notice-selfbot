@@ -72,8 +72,9 @@ function stubFetch(xmlByUrl, apiById = {}) {
                 }),
             };
         }
-        const xml = xmlByUrl[String(url)];
-        if (!xml) return { ok: false, status: 404, text: async () => '' };
+        const key = String(url);
+        const xml = xmlByUrl[key];
+        if (!(key in xmlByUrl)) return { ok: false, status: 404, text: async () => '' };
         return {
             ok: true,
             status: 200,
@@ -131,24 +132,26 @@ test('フィードのチャンネルIDはUC接頭辞なしでも照合する', a
     assert.equal(state.lastYoutubeVideoIds[CHANNEL_A], 'V1');
 });
 
-test('仮フィードは異常扱いで再試行させる', async () => {
+test('仮フィード・不正形式は異常扱いで再試行させる', async () => {
     const placeholder =
         '<?xml version="1.0" encoding="utf-8"?>\n<!--\n  This is a static file.\n-->\n' +
         '<feed xmlns="http://www.w3.org/2005/Atom"><title>YouTube video feed</title></feed>';
     assert.equal(isPlaceholderFeed(placeholder), true);
     assert.equal(isPlaceholderFeed(sampleFeed(CHANNEL_A, [])), false);
+    assert.equal(isPlaceholderFeed(''), false);
     const state = {};
-    await assert.rejects(
+    const run = (xml) =>
         checkYoutubeTarget({
             target: { handle: 'H', channelId: CHANNEL_A },
             state,
             saveState: () => {},
             send: async () => {},
-            fetchImpl: stubFetch({ [feedUrl(CHANNEL_A)]: placeholder }),
+            fetchImpl: stubFetch({ [feedUrl(CHANNEL_A)]: xml }),
             logger: { log() {}, warn() {}, error() {} },
-        }),
-        /仮フィード/,
-    );
+        });
+    await assert.rejects(run(placeholder), /仮フィード/);
+    await assert.rejects(run(''), /形式が不正/);
+    await assert.rejects(run('<html>not a feed</html>'), /形式が不正/);
     assert.deepEqual(state.lastYoutubeVideoIds, {});
 });
 

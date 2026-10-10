@@ -93,6 +93,10 @@ async function checkYoutubeTarget({
         throw new Error(
             `YouTubeから仮フィードが返されました (${target.handle || target.channelId})。レート制限の可能性があり次回再試行します`,
         );
+    if (!feed.xml || !feed.xml.includes('<feed'))
+        throw new Error(
+            `YouTubeフィードの形式が不正です (${target.handle || target.channelId})。次回再試行します`,
+        );
     if (feed.etag || feed.lastModified) {
         state.youtubeFeedMeta[key] = {
             ...(feed.etag ? { etag: feed.etag } : {}),
