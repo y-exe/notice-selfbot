@@ -1,0 +1,36 @@
+{
+    "NOTIFICATION_CHANNEL_ID": "",
+    "TWITTER_SOURCE": "angelic-angel",
+    "CHECK_INTERVAL_MIN_SECONDS": 180,
+    "CHECK_INTERVAL_MAX_SECONDS": 300,
+    "EVENT_CREATION": {
+        "enabled": false,
+        "serverId": "",
+        "roleId": null
+    },
+    "VOICE_STATE_UPDATES": [
+        {
+            "enabled": false,
+            "type": "作業配信",
+            "serverId": "",
+            "userId": "",
+            "channelId": "",
+            "roleId": null
+        }
+    ],
+    "TWITTER_UPDATES": [
+        {
+            "enabled": false,
+            "username": "example",
+            "roleId": null
+        }
+    ],
+    "YOUTUBE_UPDATES": [
+        {
+            "enabled": false,
+            "handle": "example",
+            "channelId": "",
+            "roleId": null
+        }
+    ]
+}

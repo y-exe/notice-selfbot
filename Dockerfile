@@ -11,5 +11,6 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 COPY --from=angelic-builder /src/target/release/angelic-angel /usr/local/bin/angelic-angel
-COPY . .
+COPY index.js angelic-start.js ./
+COPY src ./src
 CMD ["node", "index.js"]

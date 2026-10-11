@@ -33,7 +33,8 @@ X通知はホームTL全体の取得ではなく、全投稿の配送やリプ�
 
 ## セットアップ
 
-`.env` に `DISCORD_TOKEN`・`TWITTER_AUTH_TOKEN`・`TWITTER_CT0` を設定し、`config.json` に通知先と監視対象を指定します。
+`.env` に `DISCORD_TOKEN`・`TWITTER_AUTH_TOKEN`・`TWITTER_CT0` を設定します。
+ローカルで試す場合は `config.example.json` を `config.json` にコピーして通知先と監視対象を指定してください。実設定はGit・イメージに含めず、起動時に外部から読み込みます。
 `state.json` がなければ `{}` を内容とするファイルを作成してください。
 
 ```bash
@@ -47,7 +48,7 @@ Angelic-Angelの初回登録は自動です。認証情報と登録情報はGit�
 
 `main` へのpush → GitHub ActionsでGHCRにイメージ公開 → Image Updater / Argo CDでk3sへ反映します。
 本番のマニフェストは [vpsリポジトリ](https://github.com/y-exe/vps) で管理しています。
-本番の監視対象はPVC上の設定を使用するため、このリポジトリの `config.json` をpushしても上書きされません。
+本番の `config.json` はGit外のConfigMapで初期化したPVC上に保存し、Podへマウントします。コードやサンプル設定のpushでは上書きされません。
 
 ## ファイル構成
 

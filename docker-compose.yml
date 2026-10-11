@@ -6,7 +6,12 @@ services:
     env_file:
       - .env
     volumes:
-      - ./config.json:/app/config.json
+      - type: bind
+        source: ./config.json
+        target: /app/config.json
+        read_only: true
+        bind:
+          create_host_path: false
       - ./state.json:/app/state.json
     environment:
       - TZ=Asia/Tokyo

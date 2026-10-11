@@ -41,6 +41,9 @@ Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお�
 
 ### config.json
 
+実設定はリポジトリ・Dockerイメージに含めません。`config.example.json` は実IDを含まない設定例です。
+読み込み先は標準で `/app/config.json`（ローカルではリポジトリ直下）、任意の場所は環境変数 `CONFIG_PATH` で指定できます。
+
 | 項目 | 内容 |
 | --- | --- |
 | `NOTIFICATION_CHANNEL_ID` | Discordの通知先チャンネル |
@@ -61,6 +64,7 @@ Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお�
 | 名前 | 用途 |
 | --- | --- |
 | `DISCORD_TOKEN` | Self-Botがログインするアカウントのトークン |
+| `CONFIG_PATH` | 任意の外部設定ファイルの読み込み先 |
 | `TWITTER_AUTH_TOKEN` / `TWITTER_CT0` | 通知をオンにしたXアカウントのCookie |
 | `TWITTER_SOURCE` | 設定ファイルより優先する取得方式 |
 | `WEBHOOK_ENDPOINT` | Angelic-Angelの送信先 |
@@ -90,7 +94,7 @@ BotとAngelic-Angelは同じPodで起動し、Webhookは `127.0.0.1` で通信�
 初回は受信側の起動を待って自動登録し、再起動時は保存済みの登録を再利用します。
 
 本番の `config.json` と `state.json` はPVC上のファイルを使用します。
-このリポジトリの `config.json` を編集してpushしても、既存PVCの設定は上書きされません。
+初期設定はGit外の `apps/notifier-initial-data` ConfigMapから、PVCにファイルがない場合だけコピーします。既存PVCの設定はコードやサンプル設定のpushでは上書きされません。
 監視対象の変更はPVC上の設定を変更してPodを再起動します。取得方式はDeploymentの環境変数で指定します。
 
 ```bash
@@ -112,7 +116,7 @@ TWITTER_CT0=your_x_ct0
 YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
-`config.json` の通知先と対象ユーザーを設定し、Xでフォロー・投稿通知をオンにしてください。
+`config.example.json` を `config.json` にコピーして通知先と対象ユーザーを設定し、Xでフォロー・投稿通知をオンにしてください。Composeはそのファイルを読み取り専用でマウントします。未配置の場合は起動しません。
 
 ```powershell
 if (!(Test-Path state.json)) { '{}' | Set-Content -Encoding ascii state.json }
