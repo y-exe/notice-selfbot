@@ -1,10 +1,13 @@
 # 設定・運用の詳細
 
+Discordクライアントはnpm配布の `discord.js-selfbot-youtsuho-v13@3.7.8` に固定しています。
+正常終了時にワーカーを異常終了と扱う上流の不具合は `patches/` のpnpmパッチで補正しています。バージョン更新時はパッチの要否とClient終了テストも確認してください。
+
 <div align="center">
 <h1>Discord通知Self-Bot</h1>
 
 [![Node.js](https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![discord.js-selfbot-v13](https://img.shields.io/badge/discord.js--selfbot--v13-5865F2?style=flat-square&logo=discord&logoColor=white)](https://github.com/aiko-chan-ai/discord.js-selfbot-v13)
+[![discord.js-selfbot-youtsuho-v13](https://img.shields.io/badge/discord.js--selfbot--youtsuho--v13-5865F2?style=flat-square&logo=discord&logoColor=white)](https://github.com/youtsuhodev/discord.js-selfbot-youtsuho-v13)
 [![Angelic-Angel](https://img.shields.io/badge/X-Web%20Push-000000?style=flat-square&logo=x&logoColor=white)](https://github.com/sh1ma/Angelic-Angel)
 [![Build](https://github.com/y-exe/notice-selfbot/actions/workflows/ghcr-publish.yml/badge.svg)](https://github.com/y-exe/notice-selfbot/actions/workflows/ghcr-publish.yml)
 

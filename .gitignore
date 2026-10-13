@@ -1,4 +1,5 @@
 node_modules/
+.patch-work/
 .env
 config.json
 state.json

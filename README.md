@@ -2,7 +2,7 @@
 <h1>Discord通知Self-Bot</h1>
 
 [![Node.js](https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![discord.js-selfbot-v13](https://img.shields.io/badge/discord.js--selfbot--v13-5865F2?style=flat-square&logo=discord&logoColor=white)](https://github.com/aiko-chan-ai/discord.js-selfbot-v13)
+[![discord.js-selfbot-youtsuho-v13](https://img.shields.io/badge/discord.js--selfbot--youtsuho--v13-5865F2?style=flat-square&logo=discord&logoColor=white)](https://github.com/youtsuhodev/discord.js-selfbot-youtsuho-v13)
 [![Angelic-Angel](https://img.shields.io/badge/X-Web%20Push-000000?style=flat-square&logo=x&logoColor=white)](https://github.com/sh1ma/Angelic-Angel)
 
 Discordのイベント・VC入室・Xの投稿を、指定チャンネルにお知らせするSelf-Botです。

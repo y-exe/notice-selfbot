@@ -1,0 +1,47 @@
+diff --git a/src/util/WorkerManager.js b/src/util/WorkerManager.js
+index 004ac433056ab27dcefcc5a015daf2ff7d49cc7d..0d5c60e6fe0a9ec15f03c0006c6e6db591ed01e8 100644
+--- a/src/util/WorkerManager.js
++++ b/src/util/WorkerManager.js
+@@ -45,6 +45,7 @@ class WorkerPool extends EventEmitter {
+     this.busyWorkers = new Set();
+     this.taskId = 0;
+     this.pendingTasks = new Map();
++    this.destroyed = false;
+ 
+     this.stats = {
+       totalTasks: 0,
+@@ -76,7 +77,7 @@ class WorkerPool extends EventEmitter {
+       });
+ 
+       worker.on('exit', code => {
+-        if (code !== 0) {
++        if (code !== 0 && !this.destroyed) {
+           this.emit('error', new Error(`Worker stopped with exit code ${code}`));
+           this._replaceWorker(worker);
+         }
+@@ -240,6 +241,7 @@ class WorkerPool extends EventEmitter {
+    * @private
+    */
+   _replaceWorker(oldWorkerInfo) {
++    if (this.destroyed) return;
+     const index = this.workers.indexOf(oldWorkerInfo);
+     if (index === -1) return;
+ 
+@@ -248,7 +250,7 @@ class WorkerPool extends EventEmitter {
+     newWorker.on('message', result => this._handleWorkerMessage(this.workers[index], result));
+     newWorker.on('error', error => this._handleWorkerError(this.workers[index], error));
+     newWorker.on('exit', code => {
+-      if (code !== 0) this._replaceWorker(this.workers[index]);
++      if (code !== 0 && !this.destroyed) this._replaceWorker(this.workers[index]);
+     });
+ 
+     // Remplacer l'ancien worker
+@@ -265,6 +267,8 @@ class WorkerPool extends EventEmitter {
+    * Arrête tous les workers
+    */
+   async destroy() {
++    if (this.destroyed) return;
++    this.destroyed = true;
+     // Annuler toutes les tâches en attente
+     for (const task of this.pendingTasks.values()) {
+       clearTimeout(task.timeout);

@@ -1,5 +1,5 @@
 const path = require('node:path');
-const { Client } = require('discord.js-selfbot-v13');
+const { Client } = require('discord.js-selfbot-youtsuho-v13');
 const { root, loadConfig, twitterTargets, youtubeTargets } = require('./config');
 const { createStateStore } = require('./storage/state');
 const { createNotifier } = require('./discord/notifications');

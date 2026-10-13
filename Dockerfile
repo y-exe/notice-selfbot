@@ -8,7 +8,8 @@ FROM node:22-trixie-slim
 RUN corepack enable
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3t64 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile --prod
 COPY --from=angelic-builder /src/target/release/angelic-angel /usr/local/bin/angelic-angel
 COPY index.js angelic-start.js ./
