@@ -83,6 +83,9 @@ function stubFetch(xmlByUrl, apiById = {}, playlistById = {}) {
             };
         }
         if (String(url).includes('googleapis.com')) {
+            if (new URL(url).searchParams.get('part') !== 'snippet') {
+                return { ok: false, status: 400, json: async () => ({ error: { errors: [{ reason: 'unknownPart' }] } }) };
+            }
             const ids = new URL(url).searchParams.get('id').split(',');
             return {
                 ok: true,

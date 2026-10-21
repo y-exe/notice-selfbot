@@ -28,7 +28,7 @@ async function enrichVideos(videos, { apiKey, fetchImpl = fetch } = {}) {
     const ids = [...new Set(videos.map((v) => v.videoId))].slice(0, 50);
     const url =
         'https://www.googleapis.com/youtube/v3/videos' +
-        `?part=snippet,liveBroadcastDetails&id=${ids.join(',')}&key=${apiKey}`;
+        `?part=snippet&id=${ids.join(',')}&key=${encodeURIComponent(apiKey)}`;
     const res = await fetchImpl(url, {
         headers: { 'user-agent': YOUTUBE_USER_AGENT },
     });
@@ -162,7 +162,14 @@ async function checkYoutubeTarget({
         saveState();
         return;
     }
-    const enriched = await enrichVideos(fresh, { apiKey, fetchImpl });
+    let enriched = fresh;
+    try {
+        enriched = await enrichVideos(fresh, { apiKey, fetchImpl });
+    } catch (error) {
+        logger.warn?.(
+            `YouTube動画の詳細を取得できないため取得済み情報で通知します (${target.handle || target.channelId}): ${error.message}`,
+        );
+    }
     for (const video of enriched) {
         try {
             await sendYoutubeVideo({ target, video, state, saveState, send, logger });
