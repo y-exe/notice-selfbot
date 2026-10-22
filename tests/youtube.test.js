@@ -343,6 +343,7 @@ test('WebSub検証応答とPush通知・重複除外', async (t) => {
     const messages = [];
     let saved = 0;
     const server = createWebsubServer({
+        notificationSince: 0,
         targets: [{ handle: 'H', channelId: CHANNEL_A }],
         state,
         saveState: () => saved++,

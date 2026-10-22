@@ -72,6 +72,7 @@ async function checkYoutubeTarget({
     fetchImpl = fetch,
     apiKey,
     logger = console,
+    baselineOnly = false,
 }) {
     if (!target.channelId) {
         logger.warn?.(
@@ -106,8 +107,8 @@ async function checkYoutubeTarget({
         const meta = state.youtubeFeedMeta[key] || {};
         const feed = await fetchFeed(target.channelId, {
             fetchImpl,
-            etag: meta.etag,
-            lastModified: meta.lastModified,
+            etag: baselineOnly ? undefined : meta.etag,
+            lastModified: baselineOnly ? undefined : meta.lastModified,
         });
         if (feed.notModified) return;
         if (isPlaceholderFeed(feed.xml))
@@ -142,7 +143,7 @@ async function checkYoutubeTarget({
         return;
     }
     // 初回観測は最新を基準として保存だけし、遡って通知しない。
-    if (!state.lastYoutubeVideoIds[channelKey(target)]) {
+    if (baselineOnly || !state.lastYoutubeVideoIds[channelKey(target)]) {
         const latest = entries[entries.length - 1];
         state.lastYoutubeVideoIds[channelKey(target)] = latest.videoId;
         for (const entry of entries)
@@ -151,7 +152,7 @@ async function checkYoutubeTarget({
         state.youtubeSeenVideoIds = state.youtubeSeenVideoIds.slice(-1000);
         saveState();
         logger.log?.(
-            `YouTube監視を開始しました: ${target.handle || target.channelId} (基準 ${latest.videoId})`,
+            `YouTube監視の基準を更新しました（過去分は通知しません）: ${target.handle || target.channelId}`,
         );
         return;
     }
@@ -189,9 +190,12 @@ function startYoutubeRssMonitor({
     sendNotification,
     fetchImpl = fetch,
     logger = console,
+    setTimeoutImpl = setTimeout,
+    clearTimeoutImpl = clearTimeout,
 }) {
     const { youtubeTargets } = require('../config');
     const targets = youtubeTargets(config);
+    const baselineNeeded = new Set(targets.map(channelKey));
     let timer;
     let stopped = false;
     const apiKey = process.env.YOUTUBE_API_KEY || config.YOUTUBE_API_KEY;
@@ -207,8 +211,11 @@ function startYoutubeRssMonitor({
                     fetchImpl,
                     apiKey,
                     logger,
+                    baselineOnly: baselineNeeded.has(channelKey(target)),
                 });
+                baselineNeeded.delete(channelKey(target));
             } catch (error) {
+                baselineNeeded.add(channelKey(target));
                 logger.error?.(
                     `YouTubeフィードの取得に失敗しました (${target.handle || target.channelId}):`,
                     error.message,
@@ -229,7 +236,7 @@ function startYoutubeRssMonitor({
         const intervalSeconds =
             Math.floor(Math.random() * (maxSeconds - minSeconds + 1)) + minSeconds;
         logger.log?.(`次のYouTube取得は${intervalSeconds}秒後です。`);
-        timer = setTimeout(async () => {
+        timer = setTimeoutImpl(async () => {
             try {
                 await checkAll();
             } catch (error) {
@@ -245,7 +252,7 @@ function startYoutubeRssMonitor({
     });
     return () => {
         stopped = true;
-        clearTimeout(timer);
+        clearTimeoutImpl(timer);
     };
 }
 

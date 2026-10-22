@@ -69,6 +69,7 @@ function createWebsubServer({
     isReady = () => true,
     secret,
     logger = console,
+    notificationSince = Date.now(),
 }) {
     const findTarget = (channelId) =>
         targets.find(
@@ -90,6 +91,17 @@ function createWebsubServer({
             );
         if (!entries.length) return;
         ensureYoutubeState(state);
+        const oldEntries = entries.filter(entry => {
+            const published = Date.parse(entry.published);
+            return !Number.isFinite(published) || published < notificationSince;
+        });
+        for (const entry of oldEntries) {
+            if (!state.youtubeSeenVideoIds.includes(entry.videoId)) state.youtubeSeenVideoIds.push(entry.videoId);
+        }
+        if (oldEntries.length) {
+            state.youtubeSeenVideoIds = state.youtubeSeenVideoIds.slice(-1000);
+            saveState();
+        }
         // 初回通知は最新を基準として保存だけし、遡って通知しない。
         if (!state.lastYoutubeVideoIds[channelKey(target)]) {
             const latest = entries[entries.length - 1];
