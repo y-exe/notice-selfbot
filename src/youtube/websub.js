@@ -1,6 +1,12 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { feedUrl, parseFeedEntries, sameChannelId, YOUTUBE_HUB_URL } = require('./feed');
+const { enrichVideos } = require('./api');
+const {
+    feedUrl,
+    parseFeedEntries,
+    sameChannelId,
+    YOUTUBE_HUB_URL,
+} = require('./feed');
 const {
     channelKey,
     ensureYoutubeState,
@@ -70,6 +76,8 @@ function createWebsubServer({
     secret,
     logger = console,
     notificationSince = Date.now(),
+    apiKey,
+    fetchImpl = fetch,
 }) {
     const findTarget = (channelId) =>
         targets.find(
@@ -91,19 +99,24 @@ function createWebsubServer({
             );
         if (!entries.length) return;
         ensureYoutubeState(state);
-        const oldEntries = entries.filter(entry => {
+        const oldEntries = entries.filter((entry) => {
             const published = Date.parse(entry.published);
             return !Number.isFinite(published) || published < notificationSince;
         });
         for (const entry of oldEntries) {
-            if (!state.youtubeSeenVideoIds.includes(entry.videoId)) state.youtubeSeenVideoIds.push(entry.videoId);
+            if (!state.youtubeSeenVideoIds.includes(entry.videoId))
+                state.youtubeSeenVideoIds.push(entry.videoId);
         }
         if (oldEntries.length) {
             state.youtubeSeenVideoIds = state.youtubeSeenVideoIds.slice(-1000);
             saveState();
         }
         // 初回通知は最新を基準として保存だけし、遡って通知しない。
-        if (!state.lastYoutubeVideoIds[channelKey(target)]) {
+        if (
+            !state.lastYoutubeVideoIds[channelKey(target)] &&
+            !state.youtubeBaselineInitialized[channelKey(target)]
+        ) {
+            state.youtubeBaselineInitialized[channelKey(target)] = true;
             const latest = entries[entries.length - 1];
             state.lastYoutubeVideoIds[channelKey(target)] = latest.videoId;
             for (const entry of entries)
@@ -116,8 +129,24 @@ function createWebsubServer({
             );
             return;
         }
-        for (const video of entries)
-            await sendYoutubeVideo({ target, video, state, saveState, send, logger });
+        let videos = entries.filter(
+            (video) => !state.youtubeSeenVideoIds.includes(video.videoId),
+        );
+        if (target.videosOnly)
+            videos = await enrichVideos(videos, {
+                apiKey,
+                fetchImpl,
+                includeLiveStreamingDetails: true,
+            });
+        for (const video of videos)
+            await sendYoutubeVideo({
+                target,
+                video,
+                state,
+                saveState,
+                send,
+                logger,
+            });
     }
 
     return http.createServer(async (req, res) => {
@@ -172,11 +201,7 @@ function createWebsubServer({
             const signature =
                 req.headers['x-hub-signature'] ||
                 req.headers['x-hub-signature-256'];
-            if (
-                secret &&
-                signature &&
-                !signatureValid(secret, signature, raw)
-            )
+            if (secret && signature && !signatureValid(secret, signature, raw))
                 return reply(401, 'Bad signature');
             const pending = queue.then(() =>
                 processBody(target, raw.toString('utf8')),

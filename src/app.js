@@ -1,6 +1,11 @@
 const path = require('node:path');
 const { Client } = require('discord.js-selfbot-youtsuho-v13');
-const { root, loadConfig, twitterTargets, youtubeTargets } = require('./config');
+const {
+    root,
+    loadConfig,
+    twitterTargets,
+    youtubeTargets,
+} = require('./config');
 const { createStateStore } = require('./storage/state');
 const { createNotifier } = require('./discord/notifications');
 const { createEventHandler } = require('./discord/events');
@@ -72,7 +77,8 @@ async function start() {
         });
         // WebSubは公開HTTPSコールバックが必要。未設定ならRSSのみ。
         const baseUrl =
-            process.env.YOUTUBE_WEBSUB_BASE_URL || config.YOUTUBE_WEBSUB_BASE_URL;
+            process.env.YOUTUBE_WEBSUB_BASE_URL ||
+            config.YOUTUBE_WEBSUB_BASE_URL;
         if (!baseUrl) {
             console.log(
                 'YOUTUBE_WEBSUB_BASE_URL未設定のためWebSubは使わずRSSのみで監視します',
@@ -89,6 +95,7 @@ async function start() {
                 432000,
         );
         websubServer = createWebsubServer({
+            apiKey: process.env.YOUTUBE_API_KEY || config.YOUTUBE_API_KEY,
             targets: youtubeTargetsList,
             state: store.state,
             saveState: store.save,
@@ -119,10 +126,7 @@ async function start() {
                     await subscribeAll(options);
                     stopWebsubRenewal = startWebsubRenewal(options);
                 } catch (error) {
-                    console.error(
-                        'WebSubの登録に失敗しました:',
-                        error.message,
-                    );
+                    console.error('WebSubの登録に失敗しました:', error.message);
                 }
             },
         );

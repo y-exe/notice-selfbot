@@ -31,6 +31,12 @@ function formatYoutubeMessage(target, video) {
 }
 
 function ensureYoutubeState(state) {
+    if (
+        !state.youtubeBaselineInitialized ||
+        typeof state.youtubeBaselineInitialized !== 'object' ||
+        Array.isArray(state.youtubeBaselineInitialized)
+    )
+        state.youtubeBaselineInitialized = {};
     if (!Array.isArray(state.youtubeSeenVideoIds))
         state.youtubeSeenVideoIds = [];
     if (
@@ -54,13 +60,25 @@ async function sendYoutubeVideo({
 }) {
     ensureYoutubeState(state);
     if (state.youtubeSeenVideoIds.includes(video.videoId)) return false;
-    await send(formatYoutubeMessage(target, video));
+    if (target.videosOnly && !video.detailsVerified) {
+        logger.warn?.(
+            `YouTube動画の種別を判定できないため通知を保留します: ${video.videoId}`,
+        );
+        return false;
+    }
+    const excluded =
+        target.videosOnly && (video.kind !== 'video' || video.isLiveStream);
+    if (!excluded)
+        await send(
+            formatYoutubeMessage(target, video),
+            target.notificationChannelId,
+        );
     state.youtubeSeenVideoIds.push(video.videoId);
-    state.youtubeSeenVideoIds = state.youtubeSeenVideoIds.slice(
-        -YOUTUBE_SEEN_LIMIT,
-    );
+    state.youtubeSeenVideoIds =
+        state.youtubeSeenVideoIds.slice(-YOUTUBE_SEEN_LIMIT);
     state.lastYoutubeVideoIds[channelKey(target)] = video.videoId;
     saveState();
+    if (excluded) return false;
     logger.log?.(
         `YouTube通知を送信しました: ${targetName(target, video)}/${video.videoId}`,
     );

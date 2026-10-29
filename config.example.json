@@ -30,7 +30,9 @@
             "enabled": false,
             "handle": "example",
             "channelId": "",
-            "roleId": null
+            "roleId": null,
+            "notificationChannelId": "",
+            "videosOnly": false
         }
     ]
 }
